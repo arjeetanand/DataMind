@@ -1,0 +1,242 @@
+"""
+DataMind — Streamlit Dashboard
+Real-time analytics UI backed by DuckDB warehouse + LangGraph agent pipeline.
+"""
+
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import duckdb
+import json
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from config.settings import DB_PATH
+from src.warehouse.queries import (monthly_revenue_trend, top_products, geo_revenue,
+                                    reorder_signals, customer_rfm_summary, daily_sales_series)
+
+st.set_page_config(
+    page_title = "DataMind — Retail Intelligence",
+    page_icon  = "🧠",
+    layout     = "wide",
+)
+
+# ── Sidebar ────────────────────────────────────────────────────────────────────
+st.sidebar.image("https://img.icons8.com/fluency/96/artificial-intelligence.png", width=60)
+st.sidebar.title("DataMind")
+st.sidebar.caption("Autonomous Retail Analytics Intelligence")
+st.sidebar.divider()
+
+page = st.sidebar.radio("Navigate", [
+    "📊 Revenue Overview",
+    "🏆 Product Intelligence",
+    "🗺️ Geographic Analysis",
+    "👥 Customer Segments",
+    "⚠️ Reorder Signals",
+    "🔮 Demand Forecast",
+    "🤖 Agent Pipeline",
+    "💬 Natural Language Query",
+])
+
+# ── DB Connection ─────────────────────────────────────────────────────────────
+@st.cache_resource
+def get_conn():
+    return duckdb.connect(str(DB_PATH), read_only=True)
+
+@st.cache_data(ttl=300)
+def load_revenue():   return monthly_revenue_trend(get_conn())
+@st.cache_data(ttl=300)
+def load_products():  return top_products(n=30, conn=get_conn())
+@st.cache_data(ttl=300)
+def load_geo():       return geo_revenue(conn=get_conn())
+@st.cache_data(ttl=300)
+def load_rfm():       return customer_rfm_summary(conn=get_conn())
+@st.cache_data(ttl=300)
+def load_reorder():   return reorder_signals(conn=get_conn())
+@st.cache_data(ttl=300)
+def load_daily():     return daily_sales_series(conn=get_conn())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+if page == "📊 Revenue Overview":
+    st.title("📊 Revenue Overview")
+    df = load_revenue()
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Revenue",  f"£{df['revenue'].sum():,.0f}")
+    col2.metric("Total Orders",   f"{int(df['orders'].sum()):,}")
+    col3.metric("Avg Monthly Rev",f"£{df['revenue'].mean():,.0f}")
+    col4.metric("Peak Month",     df.loc[df['revenue'].idxmax(), 'month_name'])
+
+    fig = px.bar(df, x="month_name", y="revenue", color="year",
+                 title="Monthly Revenue by Year",
+                 labels={"revenue": "Revenue (£)", "month_name": "Month"},
+                 barmode="group", template="plotly_dark")
+    st.plotly_chart(fig, use_container_width=True)
+
+    fig2 = go.Figure()
+    fig2.add_trace(go.Scatter(x=df.index, y=df["mom_growth_pct"],
+                              mode="lines+markers", name="MoM Growth %",
+                              line=dict(color="#00d4aa")))
+    fig2.add_hline(y=0, line_dash="dash", line_color="red")
+    fig2.update_layout(title="Month-over-Month Revenue Growth %", template="plotly_dark")
+    st.plotly_chart(fig2, use_container_width=True)
+
+
+elif page == "🏆 Product Intelligence":
+    st.title("🏆 Product Intelligence")
+    df = load_products()
+
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        n = st.slider("Top N products", 5, 30, 15)
+    df = df.head(n)
+
+    fig = px.bar(df, x="total_revenue", y="description", orientation="h",
+                 color="price_band", title=f"Top {n} Products by Revenue",
+                 template="plotly_dark", height=600,
+                 labels={"total_revenue": "Revenue (£)", "description": "Product"})
+    fig.update_layout(yaxis=dict(autorange="reversed"))
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.dataframe(df[["description", "total_revenue", "total_units", "price_band", "revenue_rank"]],
+                 use_container_width=True)
+
+
+elif page == "🗺️ Geographic Analysis":
+    st.title("🗺️ Geographic Analysis")
+    df = load_geo()
+
+    fig = px.choropleth(df, locations="country", locationmode="country names",
+                        color="total_revenue", hover_name="country",
+                        title="Revenue by Country",
+                        color_continuous_scale="Viridis", template="plotly_dark")
+    st.plotly_chart(fig, use_container_width=True)
+
+    top10 = df.head(10)
+    fig2 = px.bar(top10, x="country", y="total_revenue",
+                  color="region", template="plotly_dark",
+                  title="Top 10 Countries by Revenue",
+                  labels={"total_revenue": "Revenue (£)"})
+    st.plotly_chart(fig2, use_container_width=True)
+
+
+elif page == "👥 Customer Segments":
+    st.title("👥 Customer Segments (RFM)")
+    df = load_rfm()
+
+    fig = px.pie(df, names="customer_segment", values="total_revenue",
+                 title="Revenue Share by Customer Segment",
+                 color_discrete_sequence=["#00d4aa","#0099ff","#ff6b35"],
+                 template="plotly_dark")
+    st.plotly_chart(fig, use_container_width=True)
+    st.dataframe(df, use_container_width=True)
+
+
+elif page == "⚠️ Reorder Signals":
+    st.title("⚠️ Reorder Signals")
+    lookback = st.slider("Lookback window (days)", 14, 60, 30)
+    df = reorder_signals(lookback_days=lookback, conn=get_conn())
+
+    if df.empty:
+        st.success("✅ No reorder signals detected.")
+    else:
+        st.error(f"🚨 {len(df)} products require attention")
+        fig = px.bar(df.head(20), x="description", y="unit_change_pct",
+                     color="signal", template="plotly_dark",
+                     title="Unit Sales Change % (Recent vs Prior Period)",
+                     labels={"unit_change_pct": "Change %", "description": "Product"})
+        st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(df, use_container_width=True)
+
+
+elif page == "🔮 Demand Forecast":
+    st.title("🔮 Demand Forecast (LSTM)")
+    st.info("Ensure model is trained first: `python -m src.ml.forecaster`")
+    try:
+        from src.ml.forecaster import predict
+        df = load_daily().set_index("ds")
+        result = predict(df)
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=result["dates"], y=result["forecast"],
+            mode="lines+markers", name="Forecast", line=dict(color="#00d4aa", width=2)))
+        fig.add_trace(go.Scatter(
+            x=result["dates"] + result["dates"][::-1],
+            y=result["upper_ci"] + result["lower_ci"][::-1],
+            fill="toself", fillcolor="rgba(0,212,170,0.15)",
+            line=dict(color="rgba(0,0,0,0)"), name="90% CI"))
+        fig.update_layout(title="7-Day Revenue Forecast with Confidence Interval",
+                          template="plotly_dark",
+                          xaxis_title="Date", yaxis_title="Projected Revenue (£)")
+        st.plotly_chart(fig, use_container_width=True)
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Projected", f"£{sum(result['forecast']):,.2f}")
+        col2.metric("Peak Day", result["dates"][result["forecast"].index(max(result["forecast"]))])
+        col3.metric("Forecast Horizon", f"{len(result['dates'])} days")
+
+    except Exception as e:
+        st.error(f"Forecast error: {e}")
+
+
+elif page == "🤖 Agent Pipeline":
+    st.title("🤖 LangGraph Agent Pipeline")
+    st.caption("DataAgent → InsightAgent → ActionAgent (A2A Protocol)")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        intent = st.selectbox("Select Intent", [
+            "revenue_trend", "top_products", "geo_revenue",
+            "reorder_signals", "rfm_summary"])
+    with col2:
+        mode = st.radio("Pipeline Mode", ["quick", "full"], horizontal=True)
+
+    if st.button("🚀 Run Pipeline", type="primary"):
+        with st.spinner("Agents running..."):
+            try:
+                from src.agents.orchestrator import run_pipeline
+                result = run_pipeline(intent, mode=mode)
+
+                st.subheader("Execution Trace")
+                for step in result.get("trace", []):
+                    st.markdown(f"✅ `{step}`")
+
+                if result.get("insight_result", {}).get("narrative"):
+                    st.subheader("💡 Insight")
+                    st.write(result["insight_result"]["narrative"])
+
+                if result.get("action_result"):
+                    st.subheader("⚡ Action Taken")
+                    st.json(result["action_result"])
+
+                if result.get("errors"):
+                    st.warning(f"Errors: {result['errors']}")
+            except Exception as e:
+                st.error(f"Pipeline error: {e}")
+
+
+elif page == "💬 Natural Language Query":
+    st.title("💬 Natural Language Query")
+    question = st.text_input("Ask anything about your retail data:",
+                              placeholder="e.g. What are the top 5 products by revenue?")
+    if question and st.button("Ask"):
+        with st.spinner("Querying warehouse..."):
+            try:
+                conn = get_conn()
+                from src.rag.indexer import build_index, NL2SQLRouter
+                idx    = build_index(conn)
+                router = NL2SQLRouter(conn, idx)
+                result = router.query(question)
+                st.subheader("Answer")
+                if result.get("source") == "sql":
+                    st.dataframe(pd.DataFrame(result["data"]), use_container_width=True)
+                    with st.expander("SQL Query"):
+                        st.code(result.get("query", ""), language="sql")
+                else:
+                    st.write(result.get("answer", ""))
+            except Exception as e:
+                st.error(str(e))
