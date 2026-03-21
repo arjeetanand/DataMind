@@ -196,5 +196,8 @@ datamind/
 │   │   ├── action_agent.py      # Alerts + reports
 │   │   └── orchestrator.py      # LangGraph graph
 │   └── api/main.py              # FastAPI
+├── utils/
+│   ├── oci_llm_service.py       # Oracle Cloud LLM integration
+│   └── schema.py                # LLM request schemas
 └── app/dashboard.py             # Streamlit
 ```
