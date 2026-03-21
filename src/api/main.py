@@ -58,6 +58,7 @@ def revenue_trend():
     try:
         conn = duckdb.connect(str(DB_PATH), read_only=True)
         df   = monthly_revenue_trend(conn)
+        df   = df.fillna(0)
         return {"data": df.to_dict(orient="records"), "rows": len(df)}
     except Exception as e:
         raise HTTPException(500, str(e))

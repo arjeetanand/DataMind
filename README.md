@@ -88,11 +88,15 @@ streamlit run app/dashboard.py
 
 Set `LLM_PROVIDER` environment variable:
 ```bash
-# Option A: Ollama (local, free)
+# Option A: OCI GenAI (Default)
+export LLM_PROVIDER=oci
+export OCI_GENAI_MODEL_ID=openai.gpt-5.2
+
+# Option B: Ollama (local, free)
 export LLM_PROVIDER=ollama
 export OLLAMA_MODEL=llama3.2
 
-# Option B: Cohere
+# Option C: Cohere
 export LLM_PROVIDER=cohere
 export COHERE_API_KEY=your_key
 ```

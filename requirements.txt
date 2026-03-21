@@ -22,6 +22,7 @@ faiss-cpu>=1.8.0
 # LangGraph Orchestration
 langgraph>=0.1.19
 langchain-core>=0.2.23
+langchain-oci
 
 # LLM Providers (choose as needed)
 cohere>=5.5.8

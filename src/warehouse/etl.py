@@ -148,7 +148,7 @@ def _build_fact_sales(df: pd.DataFrame, dim_date, dim_product,
 
     fact["sale_id"] = range(1, len(fact) + 1)
     fact.rename(columns={"Quantity": "quantity", "Price": "unit_price",
-                         "Invoice": "invoice", "InvoiceDate": "invoice_date"}, inplace=True)
+                         "Invoice": "invoice", "InvoiceDate": "invoice_date", "Revenue": "revenue"}, inplace=True)
 
     return fact[["sale_id", "invoice", "date_key", "product_key", "customer_key",
                  "geo_key", "quantity", "unit_price", "revenue", "invoice_date"]]
