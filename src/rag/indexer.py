@@ -149,9 +149,10 @@ class NL2SQLRouter:
       - LlamaIndex semantic search (conceptual / trend questions)
     """
 
-    SQL_KEYWORDS = ["total", "sum", "average", "count", "how many", "revenue",
-                    "top", "most", "least", "between", "compare", "by country",
-                    "by month", "by product", "trend", "growth"]
+    SQL_KEYWORDS = ["total", "sum", "average", "count", "how many", "revenue", "sales",
+                    "top", "most", "highest", "best", "least", "between", "compare",
+                    "country", "countries", "month", "months", "product", "products",
+                    "trend", "growth", "performance", "daily"]
 
     def __init__(self, conn: duckdb.DuckDBPyConnection, index):
         self.conn  = conn
@@ -165,7 +166,9 @@ class NL2SQLRouter:
     def _generate_sql(self, query: str) -> str:
         """Simple rule-based NL2SQL for common patterns."""
         q = query.lower()
-        if "top" in q and "product" in q:
+        
+        # Pattern 1: Top Products
+        if ("top" in q or "most" in q or "highest" in q or "best" in q) and ("product" in q or "item" in q):
             n = 10
             for w in q.split():
                 if w.isdigit(): n = int(w); break
@@ -174,18 +177,31 @@ class NL2SQLRouter:
                 FROM fact_sales f JOIN dim_product p ON f.product_key=p.product_key
                 GROUP BY p.description ORDER BY revenue DESC LIMIT {n}
             """
-        if "revenue" in q and "month" in q:
+        
+        # Pattern 2: Monthly Revenue / Sales Trend
+        if ("revenue" in q or "sales" in q) and ("month" in q or "trend" in q):
             return """
                 SELECT d.year, d.month_name, ROUND(SUM(f.revenue),2) AS revenue
                 FROM fact_sales f JOIN dim_date d ON f.date_key=d.date_key
                 GROUP BY d.year, d.month_name, d.month ORDER BY d.year, d.month
             """
-        if "country" in q:
+        
+        # Pattern 3: Country Revenue (Handles "country" or "countries")
+        if "countr" in q or "geographic" in q or "region" in q:
             return """
                 SELECT g.country, ROUND(SUM(f.revenue),2) AS revenue
                 FROM fact_sales f JOIN dim_geography g ON f.geo_key=g.geo_key
                 GROUP BY g.country ORDER BY revenue DESC LIMIT 15
             """
+
+        # Pattern 4: Customer Segments
+        if "segment" in q or "customer type" in q:
+            return """
+                SELECT c.customer_segment, COUNT(*) AS customers, ROUND(SUM(f.revenue),2) AS revenue
+                FROM fact_sales f JOIN dim_customer c ON f.customer_key=c.customer_key
+                GROUP BY c.customer_segment ORDER BY revenue DESC
+            """
+            
         return None
 
     def query(self, question: str) -> dict:

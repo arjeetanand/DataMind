@@ -82,3 +82,9 @@ data/
 *.sqlite
 logs/
 *.log
+nextstep-plan/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/

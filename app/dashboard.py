@@ -9,9 +9,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import duckdb
 import json
+import requests
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+API_URL = "http://localhost:8000"
 
 from config.settings import DB_PATH
 from src.warehouse.queries import (monthly_revenue_trend, top_products, geo_revenue,
@@ -57,13 +60,6 @@ def load_rfm():       return customer_rfm_summary(conn=get_conn())
 def load_reorder():   return reorder_signals(conn=get_conn())
 @st.cache_data(ttl=300)
 def load_daily():     return daily_sales_series(get_conn())
-
-@st.cache_resource
-def get_rag_components(_conn):
-    from src.rag.indexer import build_index, NL2SQLRouter
-    idx = build_index(_conn)
-    router = NL2SQLRouter(_conn, idx)
-    return idx, router
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -209,8 +205,11 @@ elif page == "🤖 Agent Pipeline":
     if st.button("🚀 Run Pipeline", type="primary"):
         with st.spinner("Agents running..."):
             try:
-                from src.agents.orchestrator import run_pipeline
-                result = run_pipeline(intent, mode=mode)
+                # Call FastAPI backend
+                payload = {"intent": intent, "mode": mode}
+                response = requests.post(f"{API_URL}/pipeline/run", json=payload)
+                response.raise_for_status()
+                result = response.json()
 
                 st.subheader("Execution Trace")
                 for step in result.get("trace", []):
@@ -232,14 +231,36 @@ elif page == "🤖 Agent Pipeline":
 
 elif page == "💬 Natural Language Query":
     st.title("💬 Natural Language Query")
+    if "question_input" not in st.session_state:
+        st.session_state["question_input"] = ""
+
     question = st.text_input("Ask anything about your retail data:",
-                              placeholder="e.g. What are the top 5 products by revenue?")
+                              value=st.session_state["question_input"],
+                              placeholder="e.g. What are the top 5 products by revenue?",
+                              key="main_query")
+    
+    # Update session state when typing manually
+    st.session_state["question_input"] = question
+    
+    st.markdown("💡 **Suggestions:**")
+    cols = st.columns(4)
+    suggestions = ["Top 5 products by revenue", "Monthly sales trend", 
+                   "Countries with highest revenue", "Customer segment breakdown"]
+    for i, s in enumerate(suggestions):
+        if cols[i % 4].button(s, key=f"sugg_{i}"):
+            st.session_state["question_input"] = s
+            st.rerun()
+
     if question and st.button("Ask"):
         with st.spinner("Querying warehouse..."):
             try:
-                conn = get_conn()
-                idx, router = get_rag_components(conn)
-                result = router.query(question)
+                # Call FastAPI backend (POST with JSON body)
+                payload = {"question": question}
+                response = requests.post(f"{API_URL}/query/nl", json=payload)
+                response.raise_for_status()
+                data = response.json()
+                result = data.get("result", {})
+
                 st.subheader("Answer")
                 if result.get("source") == "sql":
                     st.dataframe(pd.DataFrame(result["data"]), width='stretch')

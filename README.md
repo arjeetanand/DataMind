@@ -11,42 +11,42 @@ A production-grade AI/ML system demonstrating end-to-end data engineering, LLM-g
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     DataMind Pipeline                           │
-│                                                                 │
-│  S3-Style Data Lake     DuckDB Star Schema     LlamaIndex RAG  │
-│  (Parquet partitioned)  (fact + 4 dims)        (FAISS + NL2SQL)│
-│         │                      │                      │         │
-│         └──────────── ETL ─────┘          ┌───────────┘         │
-│                                           │                     │
-│              ┌────────────────────────────┘                     │
-│              ▼                                                  │
-│   ┌─────── LangGraph Orchestrator ────────┐                    │
-│   │                                       │                    │
-│   │  [DataAgent]──▶[InsightAgent]──▶[ActionAgent]             │
-│   │      │ A2A          │ A2A          │ A2A                   │
-│   │   DuckDB SQL    LLM + RAG      Alerts/Reports              │
-│   │                 PyTorch LSTM                               │
-│   └───────────────────────────────────────┘                    │
-│                                                                 │
-│              FastAPI REST  ──  Streamlit Dashboard             │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          DataMind Platform                              │
+│                                                                         │
+│  ┌───────────────────┐        ┌───────────────────┐      ┌───────────┐  │
+│  │  React Frontend   │ ◀────▶ │    Streamlit      │ ◀──▶ │  FastAPI  │  │
+│  │ (Aether Design)   │        │ (Analytics Ops)   │      │  Backend  │  │
+│  └───────────────────┘        └───────────────────┘      └─────┬─────┘  │
+│                                                                │        │
+│          ┌─────────────────────────────────────────────────────┘        │
+│          ▼                                                              │
+│  ┌─────────────── LangGraph Orchestrator (A2A Agents) ────────────────┐ │
+│  │                                                                    │ │
+│  │ [DataAgent] ──▶ [InsightAgent] ──▶ [ActionAgent]                   │ │
+│  │     │               │ (RAG + ML)         │ (Reports)               │ │
+│  └─────┼───────────────┼────────────────────┼─────────────────────────┘ │
+│        ▼               ▼                    ▼                           │
+│  ┌───────────┐  ┌──────────────┐      ┌───────────┐                     │
+│  │  DuckDB   │  │  LlamaIndex  │      │  PyTorch  │                     │
+│  │ Warehouse │  │  FAISS RAG   │      │   LSTM    │                     │
+│  └───────────┘  └──────────────┘      └───────────┘                     │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Data Lake | AWS S3 / Local Parquet (Hive-partitioned, Snappy compressed) |
-| Warehouse | DuckDB — star schema (fact_sales + 4 dimensions) |
-| ETL | Python + PyArrow + DuckDB |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
-| RAG | LlamaIndex + FAISS vector index + NL2SQL router |
-| Forecasting | PyTorch LSTM + Attention + Monte Carlo dropout |
-| Agents | LangGraph + custom A2A protocol |
-| LLM Backend | Ollama (local) / Cohere Command R+ / OCI GenAI |
-| API | FastAPI + Pydantic v2 |
-| Dashboard | Streamlit + Plotly |
+| **Frontend (Modern)** | **React 18 + Vite + Lucide Icons + Recharts** |
+| **Frontend (Ops)** | **Streamlit** (for rapid analytics prototyping) |
+| **API / Backend** | **FastAPI + Pydantic v2 + Uvicorn** |
+| **Data Lake** | AWS S3 / Local Parquet (Hive-partitioned) |
+| **Warehouse** | **DuckDB** — star schema (fact_sales + 4 dimensions) |
+| **RAG / AI** | **LlamaIndex** + FAISS + Robust NL2SQL Router |
+| **Forecasting** | **PyTorch LSTM** + Attention for demand prediction |
+| **Orchestration** | **LangGraph** + Custom A2A Agentic Protocol |
+| **LLM Backend** | OCI GenAI / Ollama / Cohere |
 
 ---
 
@@ -77,9 +77,16 @@ python -m src.ml.forecaster
 uvicorn src.api.main:app --reload
 ```
 
-### 6. Launch dashboard
+### 6. Launch Streamlit Dashboard
 ```bash
 streamlit run app/dashboard.py
+```
+
+### 7. Launch React Dashboard (Modern UI)
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
