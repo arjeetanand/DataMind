@@ -8,6 +8,14 @@ Strategy:
   4. LLM grounds response in retrieved warehouse context
 """
 
+import sys
+# Legacy shim for LlamaIndex/LangChain version mismatch
+try:
+    import langchain_core.callbacks
+    sys.modules['langchain.callbacks'] = langchain_core.callbacks
+except ImportError:
+    pass
+
 import duckdb
 import pandas as pd
 import json
@@ -91,6 +99,8 @@ def _build_documents(conn: duckdb.DuckDBPyConnection) -> list:
 
 
 # ── Index Builder ─────────────────────────────────────────────────────────────
+_GLOBAL_EMBED_MODEL = None
+
 def build_index(conn: duckdb.DuckDBPyConnection, persist_dir: str = str(Path(FAISS_INDEX).parent)):
     """Build or reload FAISS vector index over warehouse documents."""
     from llama_index.core import VectorStoreIndex, StorageContext, load_index_from_storage
@@ -108,8 +118,12 @@ def build_index(conn: duckdb.DuckDBPyConnection, persist_dir: str = str(Path(FAI
         from llama_index.core.llms.mock import MockLLM
         Settings.llm = MockLLM()
 
-    embed_model = HuggingFaceEmbedding(model_name=EMBED_MODEL)
-    Settings.embed_model = embed_model
+    global _GLOBAL_EMBED_MODEL
+    if _GLOBAL_EMBED_MODEL is None:
+        log.info(f"Initializing embedding model: {EMBED_MODEL}")
+        _GLOBAL_EMBED_MODEL = HuggingFaceEmbedding(model_name=EMBED_MODEL)
+    
+    Settings.embed_model = _GLOBAL_EMBED_MODEL
 
     persist_path = Path(persist_dir)
     if (persist_path / "docstore.json").exists():
@@ -119,7 +133,7 @@ def build_index(conn: duckdb.DuckDBPyConnection, persist_dir: str = str(Path(FAI
     else:
         log.info("Building new FAISS index over warehouse documents...")
         docs  = _build_documents(conn)
-        index = VectorStoreIndex.from_documents(docs, embed_model=embed_model, show_progress=True)
+        index = VectorStoreIndex.from_documents(docs, embed_model=_GLOBAL_EMBED_MODEL, show_progress=True)
         persist_path.mkdir(parents=True, exist_ok=True)
         index.storage_context.persist(persist_dir=persist_dir)
         log.info(f"Index persisted to {persist_dir}")

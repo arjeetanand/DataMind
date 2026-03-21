@@ -87,8 +87,8 @@ class ActionAgent(BaseAgent):
 
     # ── Executive Report ──────────────────────────────────────────────────────
     def _generate_executive_report(self, payload: dict) -> dict:
-        insights    = payload.get("insights", {})
-        forecast    = payload.get("forecast", {})
+        insights    = payload.get("insights") or {}
+        forecast    = payload.get("forecast") or {}
         now         = datetime.datetime.now()
 
         report_md   = f"""# DataMind Executive Report

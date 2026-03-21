@@ -126,8 +126,8 @@ def action_node(state: PipelineState, agent: ActionAgent) -> PipelineState:
     else:
         action_intent = "executive_report"
         payload = {
-            "insights" : state.get("insight_result", {}),
-            "forecast" : state.get("forecast_result", {}),
+            "insights" : state.get("insight_result") or {},
+            "forecast" : state.get("forecast_result") or {},
         }
 
     msg = A2AMessage(

@@ -56,15 +56,26 @@ def load_rfm():       return customer_rfm_summary(conn=get_conn())
 @st.cache_data(ttl=300)
 def load_reorder():   return reorder_signals(conn=get_conn())
 @st.cache_data(ttl=300)
-def load_daily():     return daily_sales_series(conn=get_conn())
+def load_daily():     return daily_sales_series(get_conn())
+
+@st.cache_resource
+def get_rag_components(_conn):
+    from src.rag.indexer import build_index, NL2SQLRouter
+    idx = build_index(_conn)
+    router = NL2SQLRouter(_conn, idx)
+    return idx, router
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 if page == "📊 Revenue Overview":
     st.title("📊 Revenue Overview")
     df = load_revenue()
+    conn = get_conn()
+    fact_count = conn.execute("SELECT COUNT(*) FROM fact_sales").fetchone()[0]
+    agg_count  = conn.execute("SELECT COUNT(*) FROM agg_daily_sales").fetchone()[0]
 
-    col1, col2, col3, col4 = st.columns(4)
+    col0, col1, col2, col3, col4 = st.columns(5)
+    col0.metric("fact_sales rows", f"{fact_count:,}")
     col1.metric("Total Revenue",  f"£{df['revenue'].sum():,.0f}")
     col2.metric("Total Orders",   f"{int(df['orders'].sum()):,}")
     col3.metric("Avg Monthly Rev",f"£{df['revenue'].mean():,.0f}")
@@ -74,7 +85,7 @@ if page == "📊 Revenue Overview":
                  title="Monthly Revenue by Year",
                  labels={"revenue": "Revenue (£)", "month_name": "Month"},
                  barmode="group", template="plotly_dark")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     fig2 = go.Figure()
     fig2.add_trace(go.Scatter(x=df.index, y=df["mom_growth_pct"],
@@ -82,7 +93,7 @@ if page == "📊 Revenue Overview":
                               line=dict(color="#00d4aa")))
     fig2.add_hline(y=0, line_dash="dash", line_color="red")
     fig2.update_layout(title="Month-over-Month Revenue Growth %", template="plotly_dark")
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width='stretch')
 
 
 elif page == "🏆 Product Intelligence":
@@ -99,10 +110,10 @@ elif page == "🏆 Product Intelligence":
                  template="plotly_dark", height=600,
                  labels={"total_revenue": "Revenue (£)", "description": "Product"})
     fig.update_layout(yaxis=dict(autorange="reversed"))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     st.dataframe(df[["description", "total_revenue", "total_units", "price_band", "revenue_rank"]],
-                 use_container_width=True)
+                 width='stretch')
 
 
 elif page == "🗺️ Geographic Analysis":
@@ -113,14 +124,14 @@ elif page == "🗺️ Geographic Analysis":
                         color="total_revenue", hover_name="country",
                         title="Revenue by Country",
                         color_continuous_scale="Viridis", template="plotly_dark")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     top10 = df.head(10)
     fig2 = px.bar(top10, x="country", y="total_revenue",
                   color="region", template="plotly_dark",
                   title="Top 10 Countries by Revenue",
                   labels={"total_revenue": "Revenue (£)"})
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width='stretch')
 
 
 elif page == "👥 Customer Segments":
@@ -131,8 +142,8 @@ elif page == "👥 Customer Segments":
                  title="Revenue Share by Customer Segment",
                  color_discrete_sequence=["#00d4aa","#0099ff","#ff6b35"],
                  template="plotly_dark")
-    st.plotly_chart(fig, use_container_width=True)
-    st.dataframe(df, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
+    st.dataframe(df, width='stretch')
 
 
 elif page == "⚠️ Reorder Signals":
@@ -148,8 +159,8 @@ elif page == "⚠️ Reorder Signals":
                      color="signal", template="plotly_dark",
                      title="Unit Sales Change % (Recent vs Prior Period)",
                      labels={"unit_change_pct": "Change %", "description": "Product"})
-        st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(df, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
+        st.dataframe(df, width='stretch')
 
 
 elif page == "🔮 Demand Forecast":
@@ -172,7 +183,7 @@ elif page == "🔮 Demand Forecast":
         fig.update_layout(title="7-Day Revenue Forecast with Confidence Interval",
                           template="plotly_dark",
                           xaxis_title="Date", yaxis_title="Projected Revenue (£)")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Projected", f"£{sum(result['forecast']):,.2f}")
@@ -227,13 +238,11 @@ elif page == "💬 Natural Language Query":
         with st.spinner("Querying warehouse..."):
             try:
                 conn = get_conn()
-                from src.rag.indexer import build_index, NL2SQLRouter
-                idx    = build_index(conn)
-                router = NL2SQLRouter(conn, idx)
+                idx, router = get_rag_components(conn)
                 result = router.query(question)
                 st.subheader("Answer")
                 if result.get("source") == "sql":
-                    st.dataframe(pd.DataFrame(result["data"]), use_container_width=True)
+                    st.dataframe(pd.DataFrame(result["data"]), width='stretch')
                     with st.expander("SQL Query"):
                         st.code(result.get("query", ""), language="sql")
                 else:

@@ -10,6 +10,14 @@ import duckdb
 import logging
 from pathlib import Path
 import sys
+import sys
+# Legacy shim for LlamaIndex/LangChain version mismatch
+try:
+    import langchain_core.callbacks
+    sys.modules['langchain.callbacks'] = langchain_core.callbacks
+except ImportError:
+    pass
+
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from src.agents.base_agent import BaseAgent, AgentRole, A2AMessage
