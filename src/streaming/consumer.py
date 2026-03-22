@@ -189,6 +189,10 @@ class LiveWriter:
                     "time": event.get("invoice_date")
                 })
                 p.lpush("live:transactions", txn_data)
+                # HyperLogLog for unique customers
+                cust_id = event.get("customer_id")
+                if cust_id:
+                    p.pfadd("live:unique_customers", str(cust_id))
             
             # Trim only once per batch (instead of inside the loop!)
             p.ltrim("live:transactions", 0, 49)

@@ -162,13 +162,14 @@ def get_live_kpis(conn=None) -> dict:
         rev = r.get("live:kpi:revenue") or 0
         txns = r.get("live:kpi:orders") or 0
         units = r.get("live:kpi:units") or 0
+        unique_cust = r.pfcount("live:unique_customers") or 0
         tps = r.get("live:tps") or 0
         
         return {
             "total_live_revenue": round(float(rev), 2),
             "total_txns"        : int(txns),
             "total_units"       : int(units),
-            "unique_customers"  : 0, # Requires HyperLogLog soon
+            "unique_customers"  : int(unique_cust),
             "avg_txn_value"     : round(float(rev)/max(1, int(txns)), 2),
             "countries"         : 0,
             "tps"               : int(tps),

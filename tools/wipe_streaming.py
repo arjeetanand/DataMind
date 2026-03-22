@@ -29,7 +29,7 @@ def wipe():
     # We use docker-compose to delete and recreate the topic
     try:
         os.system("docker-compose exec -T kafka kafka-topics.sh --bootstrap-server localhost:9092 --delete --topic retail-events")
-        os.system("docker-compose exec -T kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic retail-events --partitions 1 --replication-factor 1")
+        os.system("docker-compose exec -T kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic retail-events --partitions 4 --replication-factor 1")
         print("Kafka Topic Reset Successful.")
     except Exception as e:
         print(f"Kafka Reset Failed: {e}")

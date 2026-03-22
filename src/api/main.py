@@ -11,6 +11,7 @@ import logging
 import time
 import json
 import sys
+import redis
 from pathlib import Path
 import threading
 import pandas as pd
@@ -327,8 +328,10 @@ def reset_live_data(request: ResetRequest):
         
         # 4. Cleanup Redis
         try:
+            import redis
             r = redis.Redis(host="localhost", port=6379, db=0)
-            r.delete("live:kpi:revenue", "live:kpi:orders", "live:kpi:units", "live:transactions", "live:status:day", "live:status:rows")
+            r.delete("live:kpi:revenue", "live:kpi:orders", "live:kpi:units", "live:transactions", 
+                     "live:status:day", "live:status:rows", "live:unique_customers", "live:tps")
         except: pass
 
         # 5. Cleanup Cache

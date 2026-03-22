@@ -53,9 +53,14 @@ CREATE TABLE IF NOT EXISTS live_forecast_outlook (
 );
 """
 
+# Architectural Note: live_sales is maintained in DuckDB as a schema reference 
+# and for small-batch fallback. High-performance ingestion is handled 
+# by ClickHouse to prevent DuckDB write locks during peak simulation.
 DELETE_LIVE_DATA_SQL = """
 DELETE FROM live_sales;
 DELETE FROM live_forecasts;
 DELETE FROM live_forecast_outlook;
 DELETE FROM live_stream_status;
 """
+
+DROP_LIVE_DDL = DELETE_LIVE_DATA_SQL 

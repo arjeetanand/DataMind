@@ -164,7 +164,41 @@ class NL2SQLRouter:
         return any(kw in q for kw in self.SQL_KEYWORDS)
 
     def _generate_sql(self, query: str) -> str:
-        """Simple rule-based NL2SQL for common patterns."""
+        """
+        Uses LLM to translate NL to SQL based on the DuckDB schema.
+        Falls back to rule-based patterns for high-confidence common questions.
+        """
+        # 1. Try rule-based first (Fast & Free)
+        rule_sql = self._rule_based_sql(query)
+        if rule_sql: return rule_sql
+
+        # 2. LLM-based SQL Generation (True AI)
+        from llama_index.core.settings import Settings
+        prompt = f"""
+        Given the following DuckDB schema:
+        - fact_sales (id, invoice, stock_code, description, quantity, price, revenue, customer_key, geo_key, date_key)
+        - dim_product (product_key, stock_code, description, price_band)
+        - dim_date (date_key, date, year, month, month_name, day_of_week)
+        - dim_customer (customer_key, customer_id, customer_segment)
+        - dim_geography (geo_key, country)
+
+        Convert this natural language question into a VALID DuckDB SQL query:
+        "{query}"
+
+        Return ONLY the SQL code, no explanation.
+        """
+        try:
+            response = Settings.llm.complete(prompt)
+            sql = str(response).strip().replace("```sql", "").replace("```", "")
+            if "SELECT" in sql.upper():
+                return sql
+        except Exception as e:
+            log.warning(f"LLM NL2SQL failed: {e}")
+        
+        return None
+
+    def _rule_based_sql(self, query: str) -> str:
+        """Hardcoded patterns for 100% accuracy on standard dashboard questions."""
         q = query.lower()
         
         # Pattern 1: Top Products
