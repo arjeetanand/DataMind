@@ -37,6 +37,9 @@ pydantic>=2.7.4
 streamlit>=1.36.0
 plotly>=5.22.0
 
+# Streaming
+kafka-python>=2.0.2
+
 # Utilities
 requests>=2.32.3
 python-dotenv>=1.0.1

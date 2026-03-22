@@ -97,6 +97,32 @@ This is the heart of your project's configuration. Instead of hardcoding paths o
 * **Job:** The Business Analyst AI.
 * **How:** It receives the tabular data, optionally pulls context from the LlamaIndex RAG or the PyTorch forecaster, structures a giant prompt, and sends it to the configured LLM (`oci_llm_service.py` -> OCI GenAI). It tells the LLM to write exactly 3 sentences: Key Finding, Business Implication, and Recommended Action.
 
+## Stabilization & Windows Compatibility
+
+During testing, a critical issue was identified where the **DuckDB file lock** prevented the API from reading data while the Consumer was writing (resulting in `503 Service Unavailable`). 
+
+The following fixes were implemented:
+1.  **Consumer Refactor**: Modified `LiveWriter` to open and close database connections for every batch, releasing the file lock immediately.
+2.  **API Resilience**: Implemented a retry mechanism in the API's `_live_conn` helper to handle transient locks and removed connection caching.
+3.  **Process Management**: Standardized the startup sequence to ensure clean state transitions.
+
+## Verification Results
+
+### Infrastructure & Pipeline
+- [x] **Kafka Cluster**: Verified healthy and accessible via Docker.
+- [x] **Data Ingestion**: Confirmed that `live_sales` and `live_forecasts` tables are populated.
+- [x] **Concurrency**: Verified that the API can successfully poll data while the Consumer is active.
+
+### API & UI
+- [x] **Endpoints**: All `/live/` endpoints return `200 OK` with valid JSON data.
+- [x] **UI Components**: The "Live Feed" tab correctly displays KPIs, the transaction ticker, and forecast charts.
+- [x] **Data Movement**: Verified that initial data loads correctly and 503 errors are eliminated.
+
+![Live Feed UI Working](file:///C:/Users/Arjeet/.gemini/antigravity/brain/4568b328-f022-4020-a421-1d2c7d7c60a3/live_feed_baseline_1774154883984.png)
+
+> [!NOTE]
+> For the best experience on Windows, it is recommended to keep the Producer speed at **Normal** or **Fast**. The **Burst** mode may still occasionally trigger locked-file warnings due to the high frequency of writes, but the API will now gracefully retry.
+
 ### `src/agents/action_agent.py`
 * **Job:** The Automation AI.
 * **How:** It parses the insight text and determines if an action is required (like warning the user a product stock is down 40%). It securely opens local files using `utf-8` encoding and writes JSON alarms or Executive Markdown Reports directly to the `data/reports/` folder.
