@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import {
     Radio, Cpu, AlertCircle, Play, Pause, RotateCcw,
-    TrendingUp, Users, Globe, ShoppingBag
+    TrendingUp, Users, Globe, ShoppingBag, Zap
 } from "lucide-react";
 
 const API = "http://localhost:8000";
@@ -371,17 +371,17 @@ export default function LiveFeed() {
             {kpis && (
                 <div style={{ display: "flex", gap: "16px", marginBottom: "28px", flexWrap: "wrap" }}>
                     <LiveKPI label="Live Revenue" value={fmt(kpis.total_live_revenue)} icon={TrendingUp} color="var(--accent-teal)" />
+                    <LiveKPI label="Ingestion Rate" value={`${kpis.tps || 0} txn/s`} sub={kpis.tps > 500 ? "High Load" : "Healthy"} icon={Zap} color="var(--accent-amber)" />
                     <LiveKPI label="Transactions" value={fmtNum(kpis.total_txns)} icon={Radio} color="var(--primary)" />
                     <LiveKPI label="Customers" value={fmtNum(kpis.unique_customers)} icon={Users} color="var(--secondary)" />
-                    <LiveKPI label="Countries" value={kpis.countries} icon={Globe} color="var(--tertiary)" />
                     <LiveKPI label="Avg Transaction" value={fmt(kpis.avg_txn_value)} icon={ShoppingBag} color="var(--accent-amber)" />
                     {mape !== null && mape !== undefined && (
                         <LiveKPI
                             label="Forecast MAPE"
-                            value={`${mape}%`}
-                            sub={mape < 15 ? "✓ Good accuracy" : mape < 25 ? "Fair accuracy" : "High error"}
+                            value={status.days_streamed === 0 ? "—" : `${mape}%`}
+                            sub={status.days_streamed === 0 ? "Evaluating..." : mape < 15 ? "✓ Good accuracy" : mape < 25 ? "Fair accuracy" : "High error"}
                             icon={Cpu}
-                            color={mape < 15 ? "var(--accent-teal)" : mape < 25 ? "var(--accent-amber)" : "var(--accent-coral)"}
+                            color={status.days_streamed === 0 ? "var(--text-dim)" : mape < 15 ? "var(--accent-teal)" : mape < 25 ? "var(--accent-amber)" : "var(--accent-coral)"}
                         />
                     )}
                 </div>

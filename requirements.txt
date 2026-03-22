@@ -39,6 +39,8 @@ plotly>=5.22.0
 
 # Streaming
 aiokafka>=0.11.0
+clickhouse-connect>=0.7.8
+redis>=5.0.4
 
 # Utilities
 requests>=2.32.3

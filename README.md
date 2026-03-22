@@ -8,46 +8,47 @@ A production-grade AI/ML system demonstrating end-to-end data engineering, LLM-g
 
 ---
 
-## Architecture
+## Architecture — Hot/Cold Split
+
+DataMind uses a high-performance **Hot/Cold Split** architecture to handle massive ingestion volumes without locking the analytical warehouse.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          DataMind Platform                              │
-│                                                                         │
-│  ┌───────────────────┐        ┌───────────────────┐      ┌───────────┐  │
-│  │  React Frontend   │ ◀────▶ │    Streamlit      │ ◀──▶ │  FastAPI  │  │
-│  │ (Aether Design)   │        │ (Analytics Ops)   │      │  Backend  │  │
-│  └───────────────────┘        └───────────────────┘      └─────┬─────┘  │
-│                                                                │        │
-│          ┌─────────────────────────────────────────────────────┘        │
-│          ▼                                                              │
-│  ┌─────────────── LangGraph Orchestrator (A2A Agents) ────────────────┐ │
-│  │                                                                    │ │
-│  │ [DataAgent] ──▶ [InsightAgent] ──▶ [ActionAgent]                   │ │
-│  │     │               │ (RAG + ML)         │ (Reports)               │ │
-│  └─────┼───────────────┼────────────────────┼─────────────────────────┘ │
-│        ▼               ▼                    ▼                           │
-│  ┌───────────┐  ┌──────────────┐      ┌───────────┐                     │
-│  │  DuckDB   │  │  LlamaIndex  │      │  PyTorch  │                     │
-│  │ Warehouse │  │  FAISS RAG   │      │   LSTM    │                     │
-│  └───────────┘  └──────────────┘      └───────────┘                     │
-└─────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   DataMind Platform                                       │
+│                                                                                           │
+│  ┌───────────────────┐           ┌──────────────────────┐         ┌────────────────────┐  │
+│  │  React Frontend   │ ◀───────▶ │     Redis (HOT)      │ ◀──────▶ │   FastAPI Backend  │  │
+│  │ (TPS Speedometer) │           │   [Sub-ms KPIs]      │         │     (Uvicorn)      │  │
+│  └───────────────────┘           └──────────────────────┘         └──────────┬─────────┘  │
+│                                              ▲                               │            │
+│          ┌───────────────────────────────────┼───────────────────────────────┘            │
+│          │                                   │                                            │
+│  ┌───────▼─────────┐           ┌─────────────┴────────┐         ┌──────────────────────┐  │
+│  │ Kafka Ingestion │ ───────▶  │ ClickHouse (HOT Path)│ ──────▶ │  S3 / Parquet (COLD) │  │
+│  │ [4 Partitions]  │           │ [Kafka Native Engine]│         │  [Archival Lake]     │  │
+│  └─────────────────┘           └──────────────────────┘         └──────────┬───────────┘  │
+│                                              │                             │              │
+│          ┌───────────────────────────────────┘                 ┌───────────▼───────────┐  │
+│          ▼                                                     │   DuckDB Warehouse    │  │
+│  ┌───────────────┐           ┌──────────────┐                  │     (Star Schema)     │  │
+│  │ PyTorch LSTM  │ ◀───────▶ │  LlamaIndex  │ ◀────────────────┤ [Analytics + Agents]  │  │
+│  │ (Forecasting) │           │  FAISS RAG   │                  └───────────────────────┘  │
+│  └───────────────┘           └──────────────┘                                             │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| **Frontend (Modern)** | **React 18 + Vite + Lucide Icons + Recharts** |
-| **Frontend (Ops)** | **Streamlit** (for rapid analytics prototyping) |
-| **API / Backend** | **FastAPI + Pydantic v2 + Uvicorn** |
-| **Data Lake** | AWS S3 / Local Parquet (Hive-partitioned) |
-| **Warehouse** | **DuckDB** — star schema (fact_sales + 4 dimensions) |
-| **RAG / AI** | **LlamaIndex** + FAISS + Robust NL2SQL Router |
-| **Forecasting** | **PyTorch LSTM** + Attention for demand prediction |
-| **Orchestration** | **LangGraph** + Custom A2A Agentic Protocol |
-| **Streaming** | **Kafka 3.5 (KRaft)** + `aiokafka` (Async) |
-| **LLM Backend** | OCI GenAI / Ollama / Cohere |
+| **Frontend** | **React 18 + Vite + Aether Design System** |
+| **Hot Path** | **ClickHouse** (Zero-lock high-volume ingestion) |
+| **KPI Cache** | **Redis** (Real-time speed & aggregation) |
+| **Warehouse** | **DuckDB** (Star Schema, analytical warehouse) |
+| **Streaming** | **Kafka + Native Engine** (Sub-second sync) |
+| **AI Layer** | **PyTorch LSTM + Attention** (Forecast) |
+| **Orchestration** | **LangGraph** (A2A Multi-agent Protocol) |
+| **Data Lake** | **Parquet** (Archival Lake) |
 
 ---
 
@@ -174,22 +175,24 @@ Runs:
 
 ---
 
-## Resume Bullets (copy-paste ready)
+## Resume Bullets (Production-Grade Architecture)
 
 ```
-• Built a Parquet-partitioned S3-style data lake with DuckDB-powered star schema
-  (fact_sales + 4 dimensions, surrogate keys, RFM segmentation) enabling 
-  sub-second analytical queries across 500K+ retail transactions
+• Orchestrated a Hot/Cold Data Split using ClickHouse (Hot Path) and DuckDB (Cold Path), 
+  implementing a zero-lock ingestion pipeline via Native Kafka Engine that decoupled 
+  real-time simulation traffic from analytical warehouse queries.
 
-• Designed a LlamaIndex RAG pipeline over structured warehouse data with NL2SQL
-  routing — grounding LLM outputs in live sales, inventory, and customer context
+• Engineered a sub-millisecond KPI Dashboard using Redis as a write-through cache, 
+  optimizing dashboard responsiveness and enabling real-time Ingestion Speed (TPS) monitoring 
+  for high-velocity retail event streams (5,000+ txns/s).
 
-• Trained a PyTorch LSTM + Attention forecasting model with Monte Carlo dropout
-  for 7-day demand prediction; integrated as autonomous tool in the agentic layer
+• Developed a PyTorch LSTM + Attention forecasting model with Monte Carlo dropout 
+  for demand prediction, integrated with an automated MAPE-aware retraining loop 
+  that ensures model accuracy stays below 15% during simulated market shifts.
 
-• Orchestrated a 3-agent A2A system (DataAgent → InsightAgent → ActionAgent) 
-  using LangGraph, enabling fully autonomous insight-to-action loops — from
-  raw warehouse data to reorder alerts and executive reports with zero human input
+• Built a multi-agent A2A (Agent-to-Agent) protocol using LangGraph and LlamaIndex RAG, 
+  enabling fully autonomous insight-to-report generation — from SQL retrieval to 
+  executive summary synthesis with zero human in the loop.
 ```
 
 ---

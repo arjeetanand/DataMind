@@ -325,7 +325,13 @@ def reset_live_data(request: ResetRequest):
                 VALUES (1, false, 'normal', NULL, 0)
             """)
         
-        # 4. Cleanup
+        # 4. Cleanup Redis
+        try:
+            r = redis.Redis(host="localhost", port=6379, db=0)
+            r.delete("live:kpi:revenue", "live:kpi:orders", "live:kpi:units", "live:transactions", "live:status:day", "live:status:rows")
+        except: pass
+
+        # 5. Cleanup Cache
         with _DATA_LOCK:
             _DATA_CACHE.clear()
         if STREAM_CONTROL_FILE.exists():

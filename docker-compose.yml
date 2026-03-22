@@ -41,3 +41,34 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: datamind
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8
+    container_name: datamind-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:latest
+    container_name: datamind-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  clickhouse_data:
+  redis_data:

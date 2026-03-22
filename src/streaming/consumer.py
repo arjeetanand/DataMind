@@ -13,27 +13,47 @@ import signal
 import sys
 import threading
 import queue
+import redis
+import clickhouse_connect
+import asyncio
+import duckdb
+import pandas as pd
+from aiokafka import AIOKafkaConsumer
 from pathlib import Path
 
-import duckdb
-import numpy as np
-import pandas as pd
-
+# DataMind internal imports
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 from config.settings import DB_PATH
 from src.streaming.live_schema import LIVE_SCHEMA_DDL
+from src.ml.forecaster import predict, MODEL_PATH, SCALER_PATH
+from src.warehouse.queries import daily_sales_series
 
 STREAM_CONTROL_FILE = Path(__file__).resolve().parents[2] / "data" / "stream_control.json"
 
 KAFKA_BOOTSTRAP = "localhost:9092"
 TOPIC = "retail-events-v1"
 GROUP_ID = "datamind-consumer-hp"
-BATCH_SIZE = 100 # Balanced for latency vs lock contention
-BATCH_TIMEOUT = 0.5 # Flush every 0.5s
-FORECAST_THROTTLE_SEC = 2.0 # Allow outlook updates every 2s
+BATCH_SIZE = 1000 
+BATCH_TIMEOUT = 0.5
+FORECAST_THROTTLE_SEC = 1.0 
+
+# Infrastructure Connectors
+REDIS_HOST = "localhost"
+REDIS_PORT = 6379
+CH_HOST = "localhost"
+CH_PORT = 8123
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("datamind.consumer")
+
+# Redis Client for Hot KPI
+try:
+    r_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
+    r_client.ping()
+    log.info("Redis connected successfully.")
+except Exception as e:
+    log.warning(f"Redis connection failed: {e}")
+    r_client = None
 
 def _read_stream_control() -> dict:
     try:
@@ -59,6 +79,7 @@ def _connect_duckdb_with_retry(path: Path, read_only: bool = False):
 def _run_forecast_logic(day: str):
     """Heavy AI logic, intended for background thread."""
     try:
+        import pandas as pd
         from src.ml.forecaster import predict, MODEL_PATH, SCALER_PATH
         from src.warehouse.queries import daily_sales_series
 
@@ -67,17 +88,23 @@ def _run_forecast_logic(day: str):
 
         with _connect_duckdb_with_retry(DB_PATH, read_only=False) as h_conn:
             df_hist_base = daily_sales_series(conn=h_conn)
-            df_live = h_conn.execute("""
-                SELECT  simulated_day                AS ds,
-                        SUM(revenue)                AS y,
-                        SUM(quantity)               AS units,
-                        COUNT(DISTINCT invoice)    AS orders,
-                        EXTRACT(DOW FROM simulated_day) AS day_of_week,
-                        EXTRACT(MONTH FROM simulated_day) AS month
-                FROM live_sales
-                GROUP BY simulated_day
-                ORDER BY simulated_day
-            """).df()
+            
+            # Fetch 'Live' data from ClickHouse instead of DuckDB
+            client = clickhouse_connect.get_client(host="localhost", port=8123)
+            try:
+                df_live = client.query_df("""
+                    SELECT  simulated_day                AS ds,
+                            SUM(revenue)                AS y,
+                            SUM(quantity)               AS units,
+                            COUNT(DISTINCT invoice)    AS orders,
+                            toDayOfWeek(simulated_day)  AS day_of_week,
+                            toMonth(simulated_day)      AS month
+                    FROM retail_events_hot
+                    GROUP BY simulated_day
+                    ORDER BY simulated_day
+                """)
+            finally:
+                client.close()
 
             if not df_live.empty:
                 df_hist = pd.concat([df_hist_base, df_live]).drop_duplicates(subset=["ds"], keep="last")
@@ -111,7 +138,25 @@ class LiveWriter:
         self._current_day = None
         self._mape_sum = 0.0
         self._lock = threading.Lock()
+        
+        # Real-time TPS tracking
+        self._last_total_rows = self._total_rows
+        self._tps = 0
+        self._tps_thread = threading.Thread(target=self._tps_monitor, daemon=True)
+        self._tps_thread.start()
+        
         log.info(f"High-Speed LiveWriter ready | rows={self._total_rows:,}")
+
+    def _tps_monitor(self):
+        """Calculate throughput delta every second."""
+        while True:
+            time.sleep(1.0)
+            with self._lock:
+                delta = self._total_rows - self._last_total_rows
+                self._last_total_rows = self._total_rows
+                self._tps = delta
+            if r_client:
+                r_client.set("live:tps", self._tps)
 
     def _get_max_id(self, conn) -> int:
         r = conn.execute("SELECT COALESCE(MAX(id), 0) FROM live_sales").fetchone()
@@ -126,27 +171,42 @@ class LiveWriter:
 
     def write_batch(self, batch: list):
         if not batch: return
-        with self._lock:
-            df = pd.DataFrame(batch)
-            df["simulated_day"] = pd.to_datetime(df["simulated_day"]).dt.date
-            df["invoice_date"] = pd.to_datetime(df["invoice_date"])
-            df["id"] = range(self._row_id, self._row_id + len(df))
-            self._row_id += len(df)
-            self._total_rows += len(df)
+        
+        # 1. Update Redis (Hot KPI Layer)
+        if r_client:
+            p = r_client.pipeline()
+            for event in batch:
+                rev = float(event.get("revenue", 0))
+                p.incrbyfloat("live:kpi:revenue", rev)
+                p.incr("live:kpi:orders")
+                p.incrby("live:kpi:units", int(event.get("quantity", 0)))
+                # Cache last 50 transactions
+                txn_data = json.dumps({
+                    "invoice": event.get("invoice"),
+                    "description": event.get("description"),
+                    "revenue": rev,
+                    "country": event.get("country"),
+                    "time": event.get("invoice_date")
+                })
+                p.lpush("live:transactions", txn_data)
             
-            # Map columns explicitly to match live_sales table schema
-            # Ensure we only insert columns that exist in the target table
-            with self._conn_with_retry() as conn:
-                conn.execute("""
-                    INSERT INTO live_sales
-                        (id, invoice, stock_code, description, quantity, price, revenue,
-                         customer_id, country, invoice_date, simulated_day)
-                    SELECT id, invoice, stock_code, description, quantity, price, revenue,
-                           customer_id, country, invoice_date, simulated_day
-                    FROM df
-                """)
+            # Trim only once per batch (instead of inside the loop!)
+            p.ltrim("live:transactions", 0, 49)
+            p.execute()
+
+        # 2. Update counter
+        with self._lock:
+            self._total_rows += len(batch)
+            
+        # [NOTE] DuckDB write removed here. 
+        # ClickHouse handles 'retail_events_hot' via native Kafka Engine.
+        # This reduces local disk IO and lock contention.
 
     def update_status(self, day: str):
+        if r_client:
+            r_client.set("live:status:day", day)
+            r_client.set("live:status:rows", self._total_rows)
+
         with self._lock:
             self._current_day = day
             ctrl = _read_stream_control()
@@ -179,6 +239,41 @@ class LiveWriter:
                 log.info(f"Cloud update: Forecast for {day} persisted.")
             except Exception as e:
                 log.warning(f"Forecast save failed: {e}")
+
+    def finalize_day(self, day: str):
+        """Calculate MAPE for a completed day by comparing ClickHouse actuals with DuckDB prediction."""
+        if not day: return
+        with self._lock:
+            try:
+                # 1. Get Actual Revenue from ClickHouse
+                ch_client = clickhouse_connect.get_client(host="localhost", port=8123)
+                try:
+                    res = ch_client.query(f"SELECT sum(revenue) FROM retail_events_hot WHERE simulated_day = '{day}'")
+                    actual = float(res.result_rows[0][0]) if res.result_rows and res.result_rows[0][0] is not None else 0
+                finally:
+                    ch_client.close()
+
+                if actual <= 0: return
+
+                # 2. Get Predicted Revenue from DuckDB
+                with self._conn_with_retry() as conn:
+                    row = conn.execute("SELECT predicted_revenue FROM live_forecasts WHERE simulated_day = ?", [day]).fetchone()
+                    if not row: return
+                    predicted = row[0]
+
+                # 3. Calculate APE and update counters
+                ape = abs(predicted - actual) / actual * 100
+                self._mape_sum += ape
+                self._days_done += 1
+                avg_mape = round(self._mape_sum / self._days_done, 2)
+                
+                # 4. Save back to DuckDB
+                with self._conn_with_retry() as conn:
+                    conn.execute("UPDATE live_stream_status SET mape = ?, days_streamed = ? WHERE id = 1", [avg_mape, self._days_done])
+                
+                log.info(f"Day Finalized: {day} | Actual={actual:,.0f} | Pred={predicted:,.0f} | APE={ape:.1f}% | MAPE={avg_mape:.1f}%")
+            except Exception as e:
+                log.warning(f"Finalize day {day} failed: {e}")
 
     def mark_stopped(self):
         with self._lock:
@@ -242,6 +337,7 @@ class RetailConsumer:
         )
         await self._consumer.start()
         seen_days = set()
+        last_day = None
         try:
             while self._running:
                 # Check if simulation is paused (Global)
@@ -260,7 +356,12 @@ class RetailConsumer:
                         day = event.get("simulated_day")
                         
                         if event.get("is_day_start") and day not in seen_days:
+                            # If a new day started, finalize the PREVIOUS day if it exists
+                            if last_day and last_day != day:
+                                self._writer.finalize_day(last_day)
+                            
                             seen_days.add(day)
+                            last_day = day
                             self._writer.update_status(day)
                             try:
                                 self._forecast_queue.put_nowait(day)

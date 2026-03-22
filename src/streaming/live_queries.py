@@ -1,64 +1,103 @@
-"""
-DataMind — Live Query Library
-SQL queries over live_sales, live_forecasts, live_stream_status.
-Mirrors src/warehouse/queries.py but targets streaming data.
-"""
-
 import duckdb
 import pandas as pd
+import redis
+import clickhouse_connect
+import json
 from pathlib import Path
 import sys
+
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 from config.settings import DB_PATH
 
+# Infrastructure Connectors
+REDIS_HOST = "localhost"
+REDIS_PORT = 6379
+CH_HOST = "localhost"
+CH_PORT = 8123
 
-def get_conn(db_path: Path = DB_PATH) -> duckdb.DuckDBPyConnection:
+def get_duckdb_conn(db_path: Path = DB_PATH) -> duckdb.DuckDBPyConnection:
     return duckdb.connect(str(db_path), read_only=True)
 
+def get_ch_client():
+    return clickhouse_connect.get_client(host=CH_HOST, port=CH_PORT)
+
+def get_redis_client():
+    return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
 
 def get_rolling_revenue(window_txns: int = 500, conn=None) -> pd.DataFrame:
-    _conn = conn or get_conn()
-    return _conn.execute(f"""
-        WITH recent AS (
-            SELECT *
-            FROM live_sales
-            ORDER BY ingested_at DESC
-            LIMIT {window_txns}
-        )
-        SELECT
-            simulated_day,
-            SUM(revenue)       AS daily_revenue,
-            COUNT(*)           AS txn_count,
-            SUM(SUM(revenue)) OVER (ORDER BY simulated_day) AS cumulative_revenue
-        FROM recent
-        GROUP BY simulated_day
-        ORDER BY simulated_day
-    """).df()
-
+    """Fetch rolling revenue from ClickHouse."""
+    client = get_ch_client()
+    try:
+        query = f"""
+            SELECT
+                simulated_day,
+                SUM(revenue)       AS daily_revenue,
+                COUNT(*)           AS txn_count,
+                SUM(SUM(revenue)) OVER (ORDER BY simulated_day) AS cumulative_revenue
+            FROM (
+                SELECT * FROM retail_events_hot
+                ORDER BY ingested_at DESC
+                LIMIT {window_txns}
+            )
+            GROUP BY simulated_day
+            ORDER BY simulated_day
+        """
+        return client.query_df(query)
+    finally:
+        client.close()
 
 def get_recent_transactions(n: int = 25, conn=None) -> pd.DataFrame:
-    _conn = conn or get_conn()
-    return _conn.execute(f"""
-        SELECT
-            id,
-            invoice,
-            stock_code,
-            description,
-            quantity,
-            price,
-            ROUND(revenue, 2)   AS revenue,
-            customer_id,
-            country,
-            CAST(simulated_day AS VARCHAR) AS simulated_day,
-            CAST(ingested_at AS VARCHAR)   AS ingested_at
-        FROM live_sales
-        ORDER BY id DESC
-        LIMIT {n}
-    """).df()
-
+    """Fetch recent transactions from Redis (fastest) or ClickHouse (fallback)."""
+    r = get_redis_client()
+    try:
+        txns = r.lrange("live:transactions", 0, n-1)
+        if txns:
+            data = [json.loads(t) for t in txns]
+            return pd.DataFrame(data)
+    except Exception:
+        pass
+    
+    # Fallback to ClickHouse
+    client = get_ch_client()
+    try:
+        df = client.query_df(f"""
+            SELECT
+                invoice,
+                stock_code,
+                description,
+                quantity,
+                price,
+                round(revenue, 2) AS revenue,
+                customer_id,
+                country,
+                toString(simulated_day) AS simulated_day,
+                toString(invoice_date) AS invoice_date
+            FROM retail_events_hot
+            ORDER BY ingested_at DESC
+            LIMIT {n}
+        """)
+        return df
+    finally:
+        client.close()
 
 def get_forecast_vs_actual(conn=None) -> pd.DataFrame:
-    _conn = conn or get_conn()
+    """Join DuckDB Forecasts with ClickHouse Actuals."""
+    _conn = conn or get_duckdb_conn()
+    
+    # Get actuals from ClickHouse
+    client = get_ch_client()
+    try:
+        actuals_df = client.query_df("""
+            SELECT simulated_day, SUM(revenue) AS actual_revenue
+            FROM retail_events_hot
+            GROUP BY simulated_day
+        """)
+    finally:
+        client.close()
+    
+    # Register actuals in DuckDB for joining
+    _conn.register("ch_actuals", actuals_df)
+    
     return _conn.execute("""
         SELECT
             CAST(f.simulated_day AS VARCHAR)  AS day,
@@ -73,17 +112,12 @@ def get_forecast_vs_actual(conn=None) -> pd.DataFrame:
                 ELSE NULL
             END AS ape_pct
         FROM live_forecasts f
-        LEFT JOIN (
-            SELECT simulated_day, SUM(revenue) AS actual_revenue
-            FROM   live_sales
-            GROUP  BY simulated_day
-        ) a ON a.simulated_day = f.simulated_day
+        LEFT JOIN ch_actuals a ON a.simulated_day = f.simulated_day
         ORDER BY f.simulated_day
     """).df()
 
-
 def get_live_forecast_outlook(conn=None) -> pd.DataFrame:
-    _conn = conn or get_conn()
+    _conn = conn or get_duckdb_conn()
     return _conn.execute("""
         SELECT
             CAST(forecast_date AS VARCHAR) AS day,
@@ -95,105 +129,84 @@ def get_live_forecast_outlook(conn=None) -> pd.DataFrame:
         ORDER BY forecast_date
     """).df()
 
-
 def get_stream_status(conn=None) -> dict:
-    _conn = conn or get_conn()
+    """Overlay Redis status on top of DuckDB metadata."""
+    r = get_redis_client()
+    day = r.get("live:status:day")
+    rows = r.get("live:status:rows")
+    
+    _conn = conn or get_duckdb_conn()
     try:
-        row = _conn.execute("""
-            SELECT
-                CAST(current_day AS VARCHAR) AS current_day,
-                total_rows,
-                speed_mode,
-                is_running,
-                days_streamed,
-                ROUND(mape, 2) AS mape,
-                CAST(started_at AS VARCHAR) AS started_at
-            FROM live_stream_status WHERE id = 1
-        """).fetchone()
-
-        if not row:
-            return _empty_status()
-
+        row = _conn.execute("SELECT days_streamed, mape, started_at FROM live_stream_status WHERE id = 1").fetchone()
+        if not row: return _empty_status()
+        
         return {
-            "current_day"  : row[0],
-            "total_rows"   : row[1],
-            "speed_mode"   : row[2],
-            "is_running"   : row[3],
-            "days_streamed": row[4],
-            "mape"         : round(row[5], 1) if row[5] is not None else None,
-            "started_at"   : row[6],
+            "current_day"  : day,
+            "total_rows"   : int(rows) if rows else 0,
+            "speed_mode"   : "normal", # Source of truth is control file anyway
+            "is_running"   : True if day else False,
+            "days_streamed": row[0],
+            "mape"         : round(row[1], 1) if row[1] is not None else None,
+            "started_at"   : str(row[2]),
         }
     except Exception:
         return _empty_status()
 
-
 def _empty_status() -> dict:
-    return {
-        "current_day"  : None,
-        "total_rows"   : 0,
-        "speed_mode"   : "normal",
-        "is_running"   : False,
-        "days_streamed": 0,
-        "mape"         : None,
-        "started_at"   : None,
-    }
-
+    return {"current_day": None, "total_rows": 0, "speed_mode": "normal", "is_running": False, "days_streamed": 0, "mape": None, "started_at": None}
 
 def get_live_kpis(conn=None) -> dict:
-    _conn = conn or get_conn()
+    """Fetch purely from Redis for sub-millisecond response."""
+    r = get_redis_client()
     try:
-        row = _conn.execute("""
-            SELECT
-                ROUND(SUM(revenue), 2)            AS total_live_revenue,
-                COUNT(*)                           AS total_txns,
-                COUNT(DISTINCT simulated_day)      AS days_complete,
-                COUNT(DISTINCT customer_id)        AS unique_customers,
-                ROUND(AVG(revenue), 2)             AS avg_txn_value,
-                COUNT(DISTINCT country)            AS countries
-            FROM live_sales
-        """).fetchone()
-
+        rev = r.get("live:kpi:revenue") or 0
+        txns = r.get("live:kpi:orders") or 0
+        units = r.get("live:kpi:units") or 0
+        tps = r.get("live:tps") or 0
+        
         return {
-            "total_live_revenue": row[0] or 0,
-            "total_txns"        : row[1] or 0,
-            "days_complete"     : row[2] or 0,
-            "unique_customers"  : row[3] or 0,
-            "avg_txn_value"     : row[4] or 0,
-            "countries"         : row[5] or 0,
+            "total_live_revenue": round(float(rev), 2),
+            "total_txns"        : int(txns),
+            "total_units"       : int(units),
+            "unique_customers"  : 0, # Requires HyperLogLog soon
+            "avg_txn_value"     : round(float(rev)/max(1, int(txns)), 2),
+            "countries"         : 0,
+            "tps"               : int(tps),
         }
     except Exception:
-        return {
-            "total_live_revenue": 0, "total_txns": 0, "days_complete": 0,
-            "unique_customers": 0, "avg_txn_value": 0, "countries": 0,
-        }
-
+        return {"total_live_revenue": 0, "total_txns": 0, "unique_customers": 0, "avg_txn_value": 0, "countries": 0, "tps": 0}
 
 def get_live_top_products(n: int = 5, conn=None) -> pd.DataFrame:
-    _conn = conn or get_conn()
-    return _conn.execute(f"""
-        SELECT
-            stock_code,
-            description,
-            SUM(quantity)  AS total_units,
-            ROUND(SUM(revenue), 2) AS total_revenue,
-            COUNT(*)       AS txn_count
-        FROM live_sales
-        GROUP BY stock_code, description
-        ORDER BY total_revenue DESC
-        LIMIT {n}
-    """).df()
-
+    client = get_ch_client()
+    try:
+        return client.query_df(f"""
+            SELECT
+                stock_code,
+                description,
+                SUM(quantity)  AS total_units,
+                round(SUM(revenue), 2) AS total_revenue,
+                COUNT(*)       AS txn_count
+            FROM retail_events_hot
+            GROUP BY stock_code, description
+            ORDER BY total_revenue DESC
+            LIMIT {n}
+        """)
+    finally:
+        client.close()
 
 def get_live_geo_revenue(n: int = 10, conn=None) -> pd.DataFrame:
-    _conn = conn or get_conn()
-    return _conn.execute(f"""
-        SELECT
-            country,
-            SUM(revenue)  AS total_revenue,
-            COUNT(DISTINCT customer_id) AS unique_customers,
-            COUNT(*)       AS txn_count
-        FROM live_sales
-        GROUP BY country
-        ORDER BY total_revenue DESC
-        LIMIT {n}
-    """).df()
+    client = get_ch_client()
+    try:
+        return client.query_df(f"""
+            SELECT
+                country,
+                SUM(revenue)  AS total_revenue,
+                COUNT(DISTINCT customer_id) AS unique_customers,
+                COUNT(*)       AS txn_count
+            FROM retail_events_hot
+            GROUP BY country
+            ORDER BY total_revenue DESC
+            LIMIT {n}
+        """)
+    finally:
+        client.close()
