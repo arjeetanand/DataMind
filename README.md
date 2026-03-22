@@ -46,6 +46,7 @@ A production-grade AI/ML system demonstrating end-to-end data engineering, LLM-g
 | **RAG / AI** | **LlamaIndex** + FAISS + Robust NL2SQL Router |
 | **Forecasting** | **PyTorch LSTM** + Attention for demand prediction |
 | **Orchestration** | **LangGraph** + Custom A2A Agentic Protocol |
+| **Streaming** | **Kafka 3.5 (KRaft)** + `aiokafka` (Async) |
 | **LLM Backend** | OCI GenAI / Ollama / Cohere |
 
 ---
@@ -87,6 +88,17 @@ streamlit run app/dashboard.py
 cd frontend
 npm install
 npm run dev
+```
+### 8. Run Streaming Simulation (Optional)
+```bash
+# Start Kafka (KRaft mode)
+docker-compose up -d
+
+# Start Consumer
+python -m src.streaming.consumer
+
+# Start Producer (loads CSV and streams)
+python -m src.streaming.producer --speed fast
 ```
 
 ---
@@ -154,6 +166,11 @@ Runs:
 | GET | `/warehouse/rfm-summary` | Customer RFM segments |
 | POST | `/pipeline/run` | Full agent pipeline |
 | POST | `/query/nl` | Natural language query |
+| GET | `/live/status` | Live stream health/progress |
+| GET | `/live/kpis` | Real-time aggregate metrics |
+| GET | `/live/revenue` | Rolling live revenue window |
+| GET | `/live/transactions` | Latest transaction ticker |
+| GET | `/live/forecast-vs-actual` | Live error tracking |
 
 ---
 
@@ -202,7 +219,12 @@ datamind/
 │   │   ├── insight_agent.py     # RAG + LLM
 │   │   ├── action_agent.py      # Alerts + reports
 │   │   └── orchestrator.py      # LangGraph graph
-│   └── api/main.py              # FastAPI
+│   ├── api/main.py              # FastAPI
+│   └── streaming/
+│       ├── consumer.py          # Async Kafka consumer
+│       ├── producer.py          # Async Kafka producer
+│       ├── live_queries.py      # DuckDB live window queries
+│       └── live_schema.py       # Live table DDL
 ├── utils/
 │   ├── oci_llm_service.py       # Oracle Cloud LLM integration
 │   └── schema.py                # LLM request schemas

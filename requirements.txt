@@ -38,7 +38,7 @@ streamlit>=1.36.0
 plotly>=5.22.0
 
 # Streaming
-kafka-python>=2.0.2
+aiokafka>=0.11.0
 
 # Utilities
 requests>=2.32.3

@@ -188,22 +188,19 @@ class LiveWriter:
             except Exception:
                 pass
 
+import asyncio
+from aiokafka import AIOKafkaConsumer
+
 class RetailConsumer:
     def __init__(self):
-        from kafka import KafkaConsumer as _KC
-        self._consumer = _KC(
-            TOPIC, bootstrap_servers=[KAFKA_BOOTSTRAP], group_id=GROUP_ID,
-            auto_offset_reset="earliest", enable_auto_commit=True,
-            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-            max_poll_records=500
-        )
+        self._consumer = None
         self._writer = LiveWriter()
         self._running = True
         self._batch = []
         self._last_flush = time.time()
         self._forecast_queue = queue.Queue(maxsize=1) # Only keep one pending forecast task
         
-        # Start background forecast worker
+        # Start background forecast worker (remain as thread for heavy logic)
         self._worker = threading.Thread(target=self._forecast_worker, daemon=True)
         self._worker.start()
 
@@ -218,7 +215,6 @@ class RetailConsumer:
         while self._running:
             try:
                 day = self._forecast_queue.get(timeout=1.0)
-                # Hard throttle to avoid DB thrashing
                 if time.time() - last_run < FORECAST_THROTTLE_SEC:
                     continue
                 
@@ -234,19 +230,30 @@ class RetailConsumer:
             except Exception as e:
                 log.error(f"Worker Error: {e}")
 
-    def run(self):
-        log.info(f"HP-Consumer active on {TOPIC}...")
+    async def run(self):
+        log.info(f"HP-Consumer (Async) active on {TOPIC}...")
+        self._consumer = AIOKafkaConsumer(
+            TOPIC,
+            bootstrap_servers=KAFKA_BOOTSTRAP,
+            group_id=GROUP_ID,
+            auto_offset_reset="earliest",
+            enable_auto_commit=True,
+            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+        )
+        await self._consumer.start()
         seen_days = set()
         try:
             while self._running:
                 # Check if simulation is paused (Global)
                 ctrl = _read_stream_control()
                 if not ctrl.get("is_running", False):
-                    time.sleep(1.0)
+                    await asyncio.sleep(1.0)
                     continue
 
-                records = self._consumer.poll(timeout_ms=500)
-                for _tp, messages in records.items():
+                # Poll for messages
+                data = await self._consumer.getmany(timeout_ms=500, max_records=BATCH_SIZE)
+                
+                for tp, messages in data.items():
                     for msg in messages:
                         event = msg.value
                         self._batch.append(event)
@@ -254,13 +261,11 @@ class RetailConsumer:
                         
                         if event.get("is_day_start") and day not in seen_days:
                             seen_days.add(day)
-                            # Update status immediately (lightweight)
                             self._writer.update_status(day)
-                            # Queue forecast (async)
                             try:
                                 self._forecast_queue.put_nowait(day)
                             except queue.Full:
-                                pass # Skip if already busy
+                                pass
 
                         if len(self._batch) >= BATCH_SIZE:
                             self._writer.write_batch(self._batch)
@@ -272,9 +277,16 @@ class RetailConsumer:
                         self._writer.write_batch(self._batch)
                         self._batch = []
                     self._last_flush = time.time()
+                
+                await asyncio.sleep(0.1) # Yield to event loop
         finally:
+            await self._consumer.stop()
             self._writer.mark_stopped()
             log.info("Consumer shutdown.")
 
 if __name__ == "__main__":
-    RetailConsumer().run()
+    consumer = RetailConsumer()
+    try:
+        asyncio.run(consumer.run())
+    except KeyboardInterrupt:
+        pass
