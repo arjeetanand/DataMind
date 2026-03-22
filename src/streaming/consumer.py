@@ -28,8 +28,8 @@ STREAM_CONTROL_FILE = Path(__file__).resolve().parents[2] / "data" / "stream_con
 KAFKA_BOOTSTRAP = "localhost:9092"
 TOPIC = "retail-events-v1"
 GROUP_ID = "datamind-consumer-hp"
-BATCH_SIZE = 500  # Larger batches for higher throughput
-BATCH_TIMEOUT = 1.0 # Flush every second if not full
+BATCH_SIZE = 100 # Balanced for latency vs lock contention
+BATCH_TIMEOUT = 0.5 # Flush every 0.5s
 FORECAST_THROTTLE_SEC = 2.0 # Allow outlook updates every 2s
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

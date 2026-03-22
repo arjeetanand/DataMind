@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 const API = "http://localhost:8000";
-const POLL_MS = 300;
+const POLL_MS = 500;
 
 const SPEEDS = [
     { id: "normal", label: "Normal", desc: "10s / day" },
@@ -215,7 +215,7 @@ export default function LiveFeed() {
 
     useEffect(() => {
         fetchAll();
-        pollRef.current = setInterval(fetchAll, 1000);
+        pollRef.current = setInterval(fetchAll, POLL_MS);
         return () => clearInterval(pollRef.current);
     }, [fetchAll]);
 

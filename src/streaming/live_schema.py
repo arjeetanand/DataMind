@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS live_sales (
     ingested_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_live_sales_id ON live_sales(id DESC);
+CREATE INDEX IF NOT EXISTS idx_live_sales_day ON live_sales(simulated_day);
+CREATE INDEX IF NOT EXISTS idx_live_sales_ingested ON live_sales(ingested_at DESC);
+
 CREATE TABLE IF NOT EXISTS live_forecasts (
     simulated_day    DATE PRIMARY KEY,
     predicted_revenue FLOAT,
