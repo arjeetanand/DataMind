@@ -30,13 +30,13 @@ EMBED_MODEL     = "sentence-transformers/all-MiniLM-L6-v2"
 FAISS_INDEX     = str(INDEX_DIR / "retail_faiss.index")
 
 # ── PyTorch Forecasting ───────────────────────────────────────────────────────
-SEQ_LEN         = 30      # lookback window (days)
+SEQ_LEN         = 60      # lookback window (days)
 PRED_LEN        = 7       # forecast horizon (days)
 HIDDEN_SIZE     = 128
 NUM_LAYERS      = 2
 BATCH_SIZE      = 64
-EPOCHS          = 30
-LR              = 1e-3
+EPOCHS          = 60
+LR              = 5e-4
 DEVICE          = "cpu"   # switch to "cuda" if available
 
 # ── FastAPI ───────────────────────────────────────────────────────────────────

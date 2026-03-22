@@ -102,7 +102,9 @@ def daily_sales_series(stock_code: str = None, conn=None) -> pd.DataFrame:
         SELECT  d.full_date                 AS ds,
                 SUM(a.total_revenue)        AS y,
                 SUM(a.total_quantity)       AS units,
-                SUM(a.num_orders)           AS orders
+                SUM(a.num_orders)           AS orders,
+                EXTRACT(DOW FROM d.full_date) AS day_of_week,
+                EXTRACT(MONTH FROM d.full_date) AS month
         FROM    agg_daily_sales a
         JOIN    dim_date d        ON a.date_key    = d.date_key
         JOIN    dim_product p     ON a.product_key = p.product_key

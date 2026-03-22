@@ -23,7 +23,7 @@ from config.settings import (SEQ_LEN, PRED_LEN, HIDDEN_SIZE, NUM_LAYERS,
 
 MODEL_PATH  = MODEL_DIR / "lstm_forecaster.pt"
 SCALER_PATH = MODEL_DIR / "scaler.pkl"
-FEATURES    = ["y", "units", "orders"]   # must match daily_sales_series columns
+FEATURES    = ["y", "units", "orders", "dow_sin", "dow_cos", "month_sin", "month_cos", "is_weekend"]
 
 
 # ── Model Definition ──────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ class DemandLSTM(nn.Module):
     Stacked LSTM for multi-step demand forecasting.
     Encoder-decoder architecture with dropout regularisation.
     """
-    def __init__(self, input_size: int = 3, hidden_size: int = HIDDEN_SIZE,
+    def __init__(self, input_size: int = 8, hidden_size: int = HIDDEN_SIZE,
                  num_layers: int = NUM_LAYERS, pred_len: int = PRED_LEN,
                  dropout: float = 0.2):
         super().__init__()
@@ -89,19 +89,37 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
 # ── Training ──────────────────────────────────────────────────────────────────
 def train(df: pd.DataFrame, epochs: int = EPOCHS) -> DemandLSTM:
     """Train LSTM on daily sales DataFrame."""
-    df = df[FEATURES].fillna(0.0)
+    # Feature Engineering
+    df["ds"] = pd.to_datetime(df["ds"])
+    df["dow"] = df["ds"].dt.dayofweek
+    df["month"] = df["ds"].dt.month
+    df["is_weekend"] = df["dow"].apply(lambda x: 1.0 if x >= 5 else 0.0)
+
+    # Cyclical encoding
+    df["dow_sin"] = np.sin(2 * np.pi * df["dow"] / 7)
+    df["dow_cos"] = np.cos(2 * np.pi * df["dow"] / 7)
+    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
+
+    df_feats = df[FEATURES].fillna(0.0)
 
     # Scale
     scaler = MinMaxScaler()
-    scaled = scaler.fit_transform(df.values)
+    scaled = scaler.fit_transform(df_feats.values)
 
     # Save scaler
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     with open(SCALER_PATH, "wb") as f:
         pickle.dump(scaler, f)
 
-    # Train / val split (80/20)
-    split      = int(len(scaled) * 0.8)
+    # Train / val split (ensure val has enough for at least one batch)
+    min_val_len = SEQ_LEN + PRED_LEN + 5
+    if len(scaled) > min_val_len + 50:
+        split = len(scaled) - min_val_len
+    else:
+        # Fallback for very small data: 90/10 split
+        split = int(len(scaled) * 0.9)
+
     train_data = scaled[:split]
     val_data   = scaled[split:]
 
@@ -117,6 +135,7 @@ def train(df: pd.DataFrame, epochs: int = EPOCHS) -> DemandLSTM:
     criterion = nn.HuberLoss()
 
     best_val = float("inf")
+    patience_counter = 0
     for epoch in range(1, epochs + 1):
         model.train()
         train_loss = 0.0
@@ -141,11 +160,18 @@ def train(df: pd.DataFrame, epochs: int = EPOCHS) -> DemandLSTM:
 
         if val_loss < best_val:
             best_val = val_loss
+            patience_counter = 0
             torch.save(model.state_dict(), MODEL_PATH)
+        else:
+            patience_counter += 1
 
         if epoch % 5 == 0:
             print(f"Epoch {epoch:3d}/{epochs} | train={train_loss/len(train_dl):.4f}"
                   f" | val={val_loss/len(val_dl):.4f}")
+
+        if patience_counter >= 15:
+            print(f"Early stopping at epoch {epoch}")
+            break
 
     # Reload best
     model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
@@ -166,10 +192,20 @@ def predict(df: pd.DataFrame, model: DemandLSTM = None) -> dict:
     with open(SCALER_PATH, "rb") as f:
         scaler: MinMaxScaler = pickle.load(f)
 
-    df = df[FEATURES].fillna(0.0).tail(SEQ_LEN)
-    scaled = scaler.transform(df.values)
+    # Feature Engineering for Inference
+    df["ds"] = pd.to_datetime(df.index)
+    df["dow"] = df["ds"].dt.dayofweek
+    df["month"] = df["ds"].dt.month
+    df["is_weekend"] = df["dow"].apply(lambda x: 1.0 if x >= 5 else 0.0)
+    df["dow_sin"] = np.sin(2 * np.pi * df["dow"] / 7)
+    df["dow_cos"] = np.cos(2 * np.pi * df["dow"] / 7)
+    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
 
-    x = torch.FloatTensor(scaled).unsqueeze(0).to(DEVICE)  # (1, seq_len, 3)
+    df_feats = df[FEATURES].fillna(0.0).tail(SEQ_LEN)
+    scaled = scaler.transform(df_feats.values)
+
+    x = torch.FloatTensor(scaled).unsqueeze(0).to(DEVICE)  # (1, seq_len, 8)
     model.eval()
 
     # Monte Carlo dropout for uncertainty estimation

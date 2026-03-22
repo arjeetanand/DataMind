@@ -106,8 +106,8 @@ function QueryResultTable({ data }) {
             <tr key={i} style={{ borderTop: "1px solid var(--border-ghost)" }}>
               {headers.map(h => (
                 <td key={h} style={{ padding: "10px", color: "var(--text)" }}>
-                  {typeof row[h] === 'number' && h.toLowerCase().includes('revenue') 
-                    ? `£${row[h].toLocaleString()}` 
+                  {typeof row[h] === 'number' && h.toLowerCase().includes('revenue')
+                    ? `£${row[h].toLocaleString()}`
                     : row[h]}
                 </td>
               ))}
@@ -179,10 +179,13 @@ export default function DataMindDashboard() {
       } catch (e) {
         console.warn("Backend connection failed. Using simulation fallback.");
       } finally {
-        setTimeout(() => setLoading(false), 800);
+        setLoading(false);
       }
     };
+    
     fetchAll();
+    const interval = setInterval(fetchAll, 1500); // Poll every 1.5 seconds
+    return () => clearInterval(interval);
   }, []);
 
   const handleQuery = async (e) => {
@@ -342,7 +345,7 @@ export default function DataMindDashboard() {
         <KpiCard label="Prediction Quality" value="94.2%" trend={0.5} icon={Zap} color="var(--tertiary)" />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr", lg: "2fr 1fr", gap: "24px", gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)" }}>
+      <div style={{ display: "grid", gap: "24px", gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)" }}>
 
         {/* Main Analytics Block */}
         <div style={{ display: "flex", flexDirection: "column", gap: "24px", minWidth: 0 }}>
@@ -467,9 +470,9 @@ export default function DataMindDashboard() {
               <div className="fade-up" style={{ marginTop: "20px", padding: "16px", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-ghost)" }}>
                 <div className="mono" style={{ fontSize: "10px", color: "var(--text-dim)", marginBottom: "8px", textTransform: "uppercase" }}>Intelligence Source: {nlResult.route?.toUpperCase()}</div>
                 <p style={{ fontSize: "13px", lineHeight: 1.6, color: "var(--text-muted)" }}>{nlResult.answer}</p>
-                
+
                 {nlResult.data && <QueryResultTable data={nlResult.data} />}
-                
+
                 {nlResult.sql && (
                   <div style={{ marginTop: "12px", padding: "8px", background: "black", borderRadius: "6px", overflowX: "auto" }}>
                     <pre className="mono" style={{ fontSize: "11px", color: "var(--accent-teal)", margin: 0 }}>{nlResult.sql}</pre>
