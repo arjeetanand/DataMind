@@ -1,6 +1,6 @@
 # DataMind — Autonomous Retail Analytics Intelligence Pipeline
 
-https://github.com/arjeetanand/DataMind.git
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/arjeetanand/DataMind.git)
 
 > **Raw Data → Dimensional Warehouse → LlamaIndex RAG → PyTorch Forecasting → A2A Agents → Autonomous Action**
 
@@ -52,7 +52,7 @@ DataMind uses a high-performance **Hot/Cold Split** architecture to handle massi
 
 ---
 
-## Quick Start
+## Quick Start — Batch Analytics
 
 ### 1. Install dependencies
 ```bash
@@ -60,8 +60,7 @@ pip install -r requirements.txt
 ```
 
 ### 2. Download dataset
-Download [Online Retail II dataset](https://www.kaggle.com/datasets/mashlyn/online-retail-ii-uci)
-and place `online_retail_II.csv` in `data/raw/`.
+Download [Online Retail II dataset](https://www.kaggle.com/datasets/mashlyn/online-retail-ii-uci) and place `online_retail_II.csv` in `data/raw/`.
 
 ### 3. Run ingestion + ETL
 ```bash
@@ -74,72 +73,47 @@ python -m src.warehouse.etl             # Parquet → DuckDB star schema
 python -m src.ml.forecaster
 ```
 
-### 5. Start API
+### 5. Start API & Dashboards
 ```bash
+# Start API
 uvicorn src.api.main:app --reload
+
+# Start React Frontend
+cd frontend && npm install && npm run dev
 ```
 
-### 6. Launch Streamlit Dashboard
+---
+
+## Live Streaming Feed
+
+DataMind simulates a high-velocity production environment using Kafka and ClickHouse.
+
+### 1. Start Infrastructure
 ```bash
-streamlit run app/dashboard.py
+docker compose up -d   # Starts Kafka, Redis, ClickHouse, Grafana
 ```
 
-### 7. Launch React Dashboard (Modern UI)
+### 2. Start Streaming Pipeline
 ```bash
-cd frontend
-npm install
-npm run dev
-```
-### 8. Run Streaming Simulation (Optional)
-```bash
-# Start Kafka (KRaft mode)
-docker-compose up -d
-
-# Start Consumer
+# Terminal A: Start Consumer
 python -m src.streaming.consumer
 
-# Start Producer (loads CSV and streams)
-python -m src.streaming.producer --speed fast
+# Terminal B: Start Producer (Simulate high-volume traffic)
+python -m src.streaming.producer --speed normal  # normal | fast | burst
 ```
 
----
-
-## LLM Configuration
-
-Set `LLM_PROVIDER` environment variable:
-```bash
-# Option A: OCI GenAI (Default)
-export LLM_PROVIDER=oci
-export OCI_GENAI_MODEL_ID=openai.gpt-5.2
-
-# Option B: Ollama (local, free)
-export LLM_PROVIDER=ollama
-export OLLAMA_MODEL=llama3.2
-
-# Option C: Cohere
-export LLM_PROVIDER=cohere
-export COHERE_API_KEY=your_key
-```
-
----
-
-## Dimensional Model
-
-```
-dim_date ──────┐
-dim_product ───┤
-               ├── fact_sales ──── agg_daily_sales
-dim_customer ──┤
-dim_geography ─┘
-```
-
-**Surrogate keys, SCD Type 1, RFM-based customer segmentation.**
+### 3. Runtime Control
+- **Sync Status**: `GET /live/status`
+- **KPI Metrics**: `GET /live/kpis`
+- **Reset Dashboard**: `POST /live/reset`
 
 ---
 
 ## Agent Pipeline
 
-```
+The **A2A (Agent-to-Agent)** protocol automates complex analysis via a LangGraph state machine.
+
+```json
 POST /pipeline/run
 {
   "intent": "reorder_signals",
@@ -148,88 +122,28 @@ POST /pipeline/run
 }
 ```
 
-Runs:
-1. **DataAgent** — fetches reorder data from DuckDB via Advanced SQL
-2. **InsightAgent** — LlamaIndex RAG + LLM analysis + LSTM forecast
-3. **ActionAgent** — generates reorder alert JSON + saves report
+1. **DataAgent** — Fetches multi-dimensional data from DuckDB via SQL.
+2. **InsightAgent** — LlamaIndex RAG + PyTorch Forecast + LLM Synthesis.
+3. **ActionAgent** — Idempotent execution of alerts and executive reports.
 
 ---
 
-## API Endpoints
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/health` | Health check |
-| GET | `/warehouse/revenue-trend` | Monthly revenue with MoM growth |
-| GET | `/warehouse/top-products?n=20` | Top products by revenue |
-| GET | `/warehouse/geo-revenue` | Revenue by country/region |
-| GET | `/warehouse/reorder-signals` | Products flagged for reorder |
-| GET | `/warehouse/rfm-summary` | Customer RFM segments |
-| POST | `/pipeline/run` | Full agent pipeline |
-| POST | `/query/nl` | Natural language query |
-| GET | `/live/status` | Live stream health/progress |
-| GET | `/live/kpis` | Real-time aggregate metrics |
-| GET | `/live/revenue` | Rolling live revenue window |
-| GET | `/live/transactions` | Latest transaction ticker |
-| GET | `/live/forecast-vs-actual` | Live error tracking |
+## Latest Improvements
+- **100% Documentation**: Standardized 2-line "Action + Impact" docstrings across all modules.
+- **Clean Repository**: Removed extraneous testing and temporary data folders for production readiness.
+- **Dependency Sync**: Consolidated requirements for local and enterprise GenAI (OCI) support.
 
 ---
 
 ## Resume Bullets (Production-Grade Architecture)
 
-```
-• Orchestrated a Hot/Cold Data Split using ClickHouse (Hot Path) and DuckDB (Cold Path), 
-  implementing a zero-lock ingestion pipeline via Native Kafka Engine that decoupled 
-  real-time simulation traffic from analytical warehouse queries.
+• Orchestrated a Hot/Cold Data Split using **ClickHouse** and **DuckDB**, implementing a zero-lock ingestion pipeline via **Native Kafka Engine** that decoupled real-time simulation traffic from analytical warehouse queries.
 
-• Engineered a sub-millisecond KPI Dashboard using Redis as a write-through cache, 
-  optimizing dashboard responsiveness and enabling real-time Ingestion Speed (TPS) monitoring 
-  for high-velocity retail event streams (5,000+ txns/s).
+• Engineered a sub-millisecond KPI Dashboard using **Redis** as a write-through cache, optimizing dashboard responsiveness and enabling real-time Ingestion Speed (TPS) monitoring for high-velocity streams (5,000+ txns/s).
 
-• Developed a PyTorch LSTM + Attention forecasting model with Monte Carlo dropout 
-  for demand prediction, integrated with an automated MAPE-aware retraining loop 
-  that ensures model accuracy stays below 15% during simulated market shifts.
+• Developed a **PyTorch LSTM + Attention** forecasting model with Monte Carlo dropout for demand prediction, integrated with an automated MAPE-aware retraining loop.
 
-• Built a multi-agent A2A (Agent-to-Agent) protocol using LangGraph and LlamaIndex RAG, 
-  enabling fully autonomous insight-to-report generation — from SQL retrieval to 
-  executive summary synthesis with zero human in the loop.
-```
+• Built a multi-agent A2A (Agent-to-Agent) protocol using **LangGraph** and **LlamaIndex RAG**, enabling fully autonomous insight-to-report generation with zero human in the loop.
 
 ---
-
-## Project Structure
-
-```
-datamind/
-├── config/settings.py           # Centralised config
-├── data/
-│   ├── raw/                     # Kaggle CSV
-│   ├── parquet/                 # Hive-partitioned lake
-│   ├── datamind.duckdb          # Warehouse
-│   ├── models/                  # PyTorch checkpoints
-│   └── reports/                 # Agent-generated outputs
-├── src/
-│   ├── ingestion/data_loader.py # CSV → Parquet
-│   ├── warehouse/
-│   │   ├── schema.py            # DDL
-│   │   ├── etl.py               # ETL pipeline
-│   │   └── queries.py           # Advanced SQL library
-│   ├── ml/forecaster.py         # PyTorch LSTM
-│   ├── rag/indexer.py           # LlamaIndex + NL2SQL
-│   ├── agents/
-│   │   ├── base_agent.py        # A2A protocol
-│   │   ├── data_agent.py        # SQL retrieval
-│   │   ├── insight_agent.py     # RAG + LLM
-│   │   ├── action_agent.py      # Alerts + reports
-│   │   └── orchestrator.py      # LangGraph graph
-│   ├── api/main.py              # FastAPI
-│   └── streaming/
-│       ├── consumer.py          # Async Kafka consumer
-│       ├── producer.py          # Async Kafka producer
-│       ├── live_queries.py      # DuckDB live window queries
-│       └── live_schema.py       # Live table DDL
-├── utils/
-│   ├── oci_llm_service.py       # Oracle Cloud LLM integration
-│   └── schema.py                # LLM request schemas
-└── app/dashboard.py             # Streamlit
-```
+*Developed by Arjeet Anand — 2024*
