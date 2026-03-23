@@ -1,33 +1,33 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  /* Colors - Arjeet Intelligence Palette */
-  --bg: #0b1326;
-  --surface-lowest: #060e20;
-  --surface-low: #131b2e;
-  --surface: #0b1326;
-  --surface-high: #222a3d;
-  --surface-highest: #2d3449;
+  /* Colors - Arjeet Intelligence Palette (Light Theme) */
+  --bg: #f6f6f6;
+  --surface-lowest: #ffffff;
+  --surface-low: #f0f1f1;
+  --surface: #f6f6f6;
+  --surface-high: #e7e8e8;
+  --surface-highest: #dbdddd;
 
-  --primary: #c0c1ff;
-  --primary-container: #8083ff;
-  --primary-glow: rgba(192, 193, 255, 0.15);
+  --primary: #4a40e0;
+  --primary-container: #9795ff;
+  --primary-glow: rgba(74, 64, 224, 0.1);
 
-  --secondary: #89ceff;
-  --secondary-container: #00a2e6;
+  --secondary: #00628c;
+  --secondary-container: #a4d8ff;
 
-  --tertiary: #d0bcff;
-  --tertiary-container: #a078ff;
+  --tertiary: #4647d3;
+  --tertiary-container: #a6a9ff;
 
-  --text: #dae2fd;
-  --text-muted: #c7c4d7;
-  --text-dim: #908fa0;
+  --text: #2d2f2f;
+  --text-muted: #5a5c5c;
+  --text-dim: #767777;
 
-  --accent-teal: #00d4aa;
-  --accent-amber: #f59e0b;
-  --accent-coral: #f87171;
+  --accent-teal: #008c73;
+  --accent-amber: #b45309;
+  --accent-coral: #b91c1c;
 
-  --border-ghost: rgba(144, 143, 160, 0.15);
+  --border-ghost: rgba(118, 119, 119, 0.15);
 
   /* Spacing */
   --spacing-1: 4px;
@@ -41,9 +41,9 @@
 
   /* Transitions */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --duration-sm: 0.2s;
-  --duration-md: 0.4s;
-  --duration-lg: 0.6s;
+  --duration-sm: 0.3s;
+  --duration-md: 0.5s;
+  --duration-lg: 0.8s;
 }
 
 * {
@@ -92,7 +92,7 @@ h6 {
 
 /* Glassmorphism */
 .glass {
-  background: rgba(23, 31, 51, 0.6);
+  background: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-ghost);
@@ -148,4 +148,17 @@ h6 {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: shimmer 3s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.magnetic {
+  transition: transform 0.3s var(--ease-out);
+}
+
+.magnetic:hover {
+  transform: scale(1.05);
 }

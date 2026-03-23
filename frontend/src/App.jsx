@@ -18,12 +18,12 @@ function App() {
       {/* Dynamic Background Glows */}
       <div style={{
         position: 'fixed', top: '-10%', left: '-10%', width: '40%', height: '40%',
-        background: 'radial-gradient(circle, var(--primary-glow) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(74, 64, 224, 0.05) 0%, transparent 70%)',
         zIndex: -1, pointerEvents: 'none', filter: 'blur(80px)'
       }} />
       <div style={{
         position: 'fixed', bottom: '-10%', right: '-10%', width: '40%', height: '40%',
-        background: 'radial-gradient(circle, rgba(137, 206, 255, 0.1) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(0, 98, 140, 0.05) 0%, transparent 70%)',
         zIndex: -1, pointerEvents: 'none', filter: 'blur(80px)'
       }} />
 
@@ -31,9 +31,9 @@ function App() {
       <nav style={{
         position: 'fixed', top: '24px', left: '50%', transform: 'translateX(-50%)',
         zIndex: 1000, display: 'flex', alignItems: 'center', padding: '6px',
-        borderRadius: '99px', background: 'rgba(19, 27, 46, 0.7)',
-        backdropFilter: 'blur(16px)', border: '1px solid var(--border-ghost)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+        borderRadius: '99px', background: 'rgba(255, 255, 255, 0.8)',
+        backdropFilter: 'blur(20px)', border: '1px solid var(--border-ghost)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)'
       }}>
         {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
           <button
