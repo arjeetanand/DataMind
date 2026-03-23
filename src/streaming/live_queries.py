@@ -16,16 +16,23 @@ CH_HOST = "localhost"
 CH_PORT = 8123
 
 def get_duckdb_conn(db_path: Path = DB_PATH) -> duckdb.DuckDBPyConnection:
+    """Create a read-only connection to the DuckDB database.
+    Used for retrieving stream status and forecast results."""
     return duckdb.connect(str(db_path), read_only=True)
 
 def get_ch_client():
+    """Initialize and return a ClickHouse connection client.
+    Primary interface for high-speed analytical queries on live data."""
     return clickhouse_connect.get_client(host=CH_HOST, port=CH_PORT)
 
 def get_redis_client():
+    """Create a connection to the local Redis instance for fast KPI access.
+    Returns a client configured for decoding responses to strings."""
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
 
 def get_rolling_revenue(window_txns: int = 500, conn=None) -> pd.DataFrame:
-    """Fetch rolling revenue from ClickHouse."""
+    """Fetch rolling and cumulative revenue metrics from ClickHouse.
+    Aggregates data across the most recent transaction window."""
     client = get_ch_client()
     try:
         query = f"""
@@ -47,7 +54,8 @@ def get_rolling_revenue(window_txns: int = 500, conn=None) -> pd.DataFrame:
         client.close()
 
 def get_recent_transactions(n: int = 25, conn=None) -> pd.DataFrame:
-    """Fetch recent transactions from Redis (fastest) or ClickHouse (fallback)."""
+    """Retrieve the 'n' most recent transactions from Redis with ClickHouse fallback.
+    Provides the fastest possible data source for the live dashboard ticker."""
     r = get_redis_client()
     try:
         txns = r.lrange("live:transactions", 0, n-1)
@@ -81,7 +89,8 @@ def get_recent_transactions(n: int = 25, conn=None) -> pd.DataFrame:
         client.close()
 
 def get_forecast_vs_actual(conn=None) -> pd.DataFrame:
-    """Join DuckDB Forecasts with ClickHouse Actuals."""
+    """Cross-reference DuckDB ML forecasts with ClickHouse real-time actuals.
+    Calculates Absolute Percentage Error (APE) for each streamed day."""
     _conn = conn or get_duckdb_conn()
     
     # Get actuals from ClickHouse
@@ -117,6 +126,8 @@ def get_forecast_vs_actual(conn=None) -> pd.DataFrame:
     """).df()
 
 def get_live_forecast_outlook(conn=None) -> pd.DataFrame:
+    """Fetch the latest 7-day revenue projection from DuckDB.
+    Returns the most recently generated forecast horizon and confidence intervals."""
     _conn = conn or get_duckdb_conn()
     return _conn.execute("""
         SELECT
@@ -130,7 +141,8 @@ def get_live_forecast_outlook(conn=None) -> pd.DataFrame:
     """).df()
 
 def get_stream_status(conn=None) -> dict:
-    """Overlay Redis status on top of DuckDB metadata."""
+    """Merge Redis real-time status details with DuckDB historical metadata.
+    Provides a comprehensive view of the stream's current health and progress."""
     r = get_redis_client()
     day = r.get("live:status:day")
     rows = r.get("live:status:rows")
@@ -153,10 +165,13 @@ def get_stream_status(conn=None) -> dict:
         return _empty_status()
 
 def _empty_status() -> dict:
+    """Generate a default empty status dictionary for fallback scenarios.
+    Ensures the API returns consistent keys even when the stream is reset."""
     return {"current_day": None, "total_rows": 0, "speed_mode": "normal", "is_running": False, "days_streamed": 0, "mape": None, "started_at": None}
 
 def get_live_kpis(conn=None) -> dict:
-    """Fetch purely from Redis for sub-millisecond response."""
+    """Fetch global performance indicators (Revenue, Orders, TPS) from Redis.
+    Optimized for sub-millisecond frontend polling loops."""
     r = get_redis_client()
     try:
         rev = r.get("live:kpi:revenue") or 0
@@ -178,6 +193,8 @@ def get_live_kpis(conn=None) -> dict:
         return {"total_live_revenue": 0, "total_txns": 0, "unique_customers": 0, "avg_txn_value": 0, "countries": 0, "tps": 0}
 
 def get_live_top_products(n: int = 5, conn=None) -> pd.DataFrame:
+    """Query ClickHouse to find the highest revenue-generating products.
+    Returns the top 'n' products based on real-time streaming data."""
     client = get_ch_client()
     try:
         return client.query_df(f"""
@@ -196,6 +213,8 @@ def get_live_top_products(n: int = 5, conn=None) -> pd.DataFrame:
         client.close()
 
 def get_live_geo_revenue(n: int = 10, conn=None) -> pd.DataFrame:
+    """Aggregate revenue and unique customer counts by country in ClickHouse.
+    Identifies the top 'n' geographic markets currently active in the stream."""
     client = get_ch_client()
     try:
         return client.query_df(f"""

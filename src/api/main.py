@@ -36,6 +36,8 @@ STREAM_CONTROL_FILE = Path(__file__).resolve().parents[2] / "data" / "stream_con
 log = logging.getLogger(__name__)
 
 def _live_conn(read_only: bool = True):
+    """Establish a DuckDB connection with aggressive retry logic for high concurrency.
+    Ensures API requests can read from the database even during heavy ingestion."""
     import time
     max_retries = 60
     for i in range(max_retries):
@@ -54,6 +56,8 @@ _MAINTENANCE_MODE = False
 _DATA_LOCK = threading.Lock()
 
 def _get_cached_data(key: str, func, ttl: float = 0.5, **kwargs):
+    """Fetch data from a local thread-safe memory cache with TTL expiration.
+    Reduces database load by serving frequently requested metrics from RAM."""
     global _MAINTENANCE_MODE
     if _MAINTENANCE_MODE:
         return {"status": "maintenance", "message": "System is resetting..."}
@@ -108,7 +112,8 @@ class ResetRequest(BaseModel):
 
 
 def _set_stream_control(is_running: Optional[bool] = None, speed_mode: Optional[str] = None) -> dict:
-    """Update stream control file (avoids DuckDB write locks for control signals)."""
+    """Atomic update of the simulation control file to signal the producer/consumer.
+    Bypasses database locks to provide responsive control signals for the stream."""
     try:
         STREAM_CONTROL_FILE.parent.mkdir(parents=True, exist_ok=True)
         current = {"is_running": False, "speed_mode": "normal"}
@@ -132,11 +137,15 @@ def _set_stream_control(is_running: Optional[bool] = None, speed_mode: Optional[
 
 @app.get("/health")
 def health():
+    """Simple health check endpoint to verify API availability.
+    Returns service version and current server timestamp."""
     return {"status": "ok", "service": "DataMind v2", "timestamp": time.time()}
 
 
 @app.get("/warehouse/revenue-trend")
 def revenue_trend():
+    """Retrieve historical revenue trends and MoM growth metrics from the warehouse.
+    Serves the main analytical dashboard with trend visualization data."""
     try:
         with _live_conn() as conn:
             df = monthly_revenue_trend(conn)
@@ -146,6 +155,8 @@ def revenue_trend():
 
 @app.get("/warehouse/top-products")
 def top_products_endpoint(n: int = 20):
+    """Fetch the top 'n' overall performing products by revenue from history.
+    Provides detailed unit counts and rankings for the product catalog."""
     try:
         with _live_conn() as conn:
             df = top_products(n=n, conn=conn)
@@ -155,6 +166,8 @@ def top_products_endpoint(n: int = 20):
 
 @app.get("/warehouse/geo-revenue")
 def geo_revenue_endpoint():
+    """Get regional and country-level revenue distribution from the DuckDB warehouse.
+    Used to visualize global market penetration and regional success."""
     try:
         with _live_conn() as conn:
             df = geo_revenue(conn=conn)
@@ -164,6 +177,8 @@ def geo_revenue_endpoint():
 
 @app.get("/warehouse/reorder-signals")
 def reorder_signals_endpoint(lookback_days: int = 30):
+    """Retrieve inventory reorder signals for products trending downwards.
+    Automates stock management by identifying potential supply chain gaps."""
     try:
         with _live_conn() as conn:
             df = reorder_signals(lookback_days=lookback_days, conn=conn)
@@ -173,6 +188,8 @@ def reorder_signals_endpoint(lookback_days: int = 30):
 
 @app.get("/warehouse/rfm-summary")
 def rfm_summary_endpoint():
+    """Fetch the summarized customer segmentation results (RFM Analysis).
+    Returns the distribution of customers across various engagement tiers."""
     try:
         with _live_conn() as conn:
             df = customer_rfm_summary(conn=conn)
@@ -183,6 +200,8 @@ def rfm_summary_endpoint():
 
 @app.post("/pipeline/run")
 def run_agent_pipeline(request: PipelineRequest):
+    """Execute a multi-stage autonomous agent pipeline for complex analytics.
+    Orchestrates data retrieval, insight generation, and recommended actions."""
     valid_intents = [
         "revenue_trend", "top_products", "geo_revenue",
         "daily_series", "reorder_signals", "rfm_summary",
@@ -209,6 +228,8 @@ def run_agent_pipeline(request: PipelineRequest):
 
 @app.post("/query/nl")
 def natural_language_query(request: NLQueryRequest):
+    """Accept a natural language question and route it to the NL2SQL engine.
+    Uses RAG indexing to generate and execute precise SQL against the warehouse."""
     try:
         conn = duckdb.connect(str(DB_PATH), read_only=True)
         from src.rag.indexer import build_index, NL2SQLRouter
@@ -222,6 +243,8 @@ def natural_language_query(request: NLQueryRequest):
 
 @app.get("/live/status")
 def live_status():
+    """Retrieve the current state of the live Kafka stream and simulation.
+    Includes running status, current day, total rows, and MAPE accuracy."""
     status = _get_cached_data("status", get_stream_status, ttl=0.3)
     # Overlay is_running and speed_mode from control file (master source)
     if STREAM_CONTROL_FILE.exists():
@@ -234,16 +257,22 @@ def live_status():
 
 @app.get("/live/kpis")
 def live_kpis():
+    """Fetch high-frequency KPIs (Revenue, Orders, TPS) from the Redis hot layer.
+    Optimized for sub-millisecond status dashboard updates."""
     return _get_cached_data("kpis", get_live_kpis, ttl=1.0)
 
 @app.get("/live/revenue")
 def live_revenue(window: int = 500):
+    """Get the latest rolling revenue timeseries for real-time charting.
+    Aggregates data across the specified transaction window from ClickHouse."""
     df = _get_cached_data(f"revenue_{window}", get_rolling_revenue, ttl=1.5, window_txns=window)
     return {"data": df.fillna(0).to_dict(orient="records"), "rows": len(df)}
 
 
 @app.get("/live/transactions")
 def live_transactions(n: int = 25):
+    """Retrieve the most recent 'n' transactions from the streaming pipeline.
+    Populates the live feed ticker with fresh retail event data."""
     try:
         with _live_conn() as conn:
             df = get_recent_transactions(n=n, conn=conn)
@@ -253,6 +282,8 @@ def live_transactions(n: int = 25):
 
 @app.get("/live/forecast-vs-actual")
 def live_forecast_vs_actual():
+    """Compare recent ML forecasts with real-time actual sales performance.
+    Used for evaluating model precision and calculating drift in real-time."""
     try:
         with _live_conn() as conn:
             df = get_forecast_vs_actual(conn=conn)
@@ -262,6 +293,8 @@ def live_forecast_vs_actual():
 
 @app.get("/live/forecast-outlook")
 def live_forecast_outlook():
+    """Fetch the 7-day future revenue projection generated by the LSTM engine.
+    Provides the forward-looking visibility displayed on the live dashboard."""
     try:
         with _live_conn() as conn:
             from src.streaming.live_queries import get_live_forecast_outlook
@@ -272,6 +305,8 @@ def live_forecast_outlook():
 
 @app.get("/live/top-products")
 def live_top_products_endpoint(n: int = 5):
+    """Identity the top 'n' products appearing in the current live stream.
+    Aggregates recently consumed events from ClickHouse for hot-item detection."""
     try:
         with _live_conn() as conn:
             df = get_live_top_products(n=n, conn=conn)
@@ -281,6 +316,8 @@ def live_top_products_endpoint(n: int = 5):
 
 @app.get("/live/geo-revenue")
 def live_geo_revenue_endpoint(n: int = 10):
+    """Track the global distribution of sales in the live streaming data.
+    Provides real-time geographic heatmapping of incoming retail orders."""
     try:
         with _live_conn() as conn:
             df = get_live_geo_revenue(n=n, conn=conn)
@@ -291,21 +328,29 @@ def live_geo_revenue_endpoint(n: int = 10):
 
 @app.post("/live/start")
 def live_start():
+    """Signal the simulation to start streaming data from the source file.
+    Triggers both the Kafka producer loop and the consumer processing."""
     return _set_stream_control(is_running=True)
 
 
 @app.post("/live/stop")
 def live_stop():
+    """Pause the live data simulation by signaling all streaming workers.
+    Ensures safe, state-preserving halt of the Kafka pipeline."""
     return _set_stream_control(is_running=False)
 
 
 @app.post("/live/control/speed")
 def set_speed(request: SpeedControlRequest):
+    """Adjust the simulation emission speed (normal, fast, or burst).
+    Allows testing system performance and UI responsiveness under varying loads."""
     return _set_stream_control(speed_mode=request.speed_mode)
 
 
 @app.post("/live/reset")
 def reset_live_data(request: ResetRequest):
+    """Wipe all live data, Redis KPIs, and DuckDB stream state.
+    Requires explicit confirmation; used to restart the simulation from scratch."""
     if not request.confirm:
         raise HTTPException(400, "Send confirm=true to wipe live data")
     global _MAINTENANCE_MODE, _DATA_CACHE

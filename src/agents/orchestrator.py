@@ -42,7 +42,8 @@ class PipelineState(TypedDict):
 
 # ── Node Functions ─────────────────────────────────────────────────────────────
 def data_node(state: PipelineState, agent: DataAgent) -> PipelineState:
-    """Node 1: Fetch data from warehouse via DataAgent."""
+    """Orchestrator node: Trigger the DataAgent to fetch warehouse records.
+    Updates the graph state with the retrieved data result and execution trace."""
     log.info(f"[DataNode] intent={state['query_intent']}")
     msg = A2AMessage(
         sender   = AgentRole.ORCHESTRATOR,
@@ -62,7 +63,8 @@ def data_node(state: PipelineState, agent: DataAgent) -> PipelineState:
 
 
 def insight_node(state: PipelineState, agent: InsightAgent) -> PipelineState:
-    """Node 2: Generate LLM-grounded insight from data."""
+    """Orchestrator node: Pass fetched data to the InsightAgent for LLM analysis.
+    Generates a grounding narrative and business context from the raw records."""
     log.info("[InsightNode] generating analysis")
     new_state = dict(state)
 
@@ -86,7 +88,8 @@ def insight_node(state: PipelineState, agent: InsightAgent) -> PipelineState:
 
 
 def forecast_node(state: PipelineState, agent: InsightAgent) -> PipelineState:
-    """Node 3 (optional): Run PyTorch demand forecast."""
+    """Orchestrator node: Trigger the PyTorch LSTM engine via InsightAgent.
+    Appends the future demand projection and uncertainty bounds to the state."""
     log.info("[ForecastNode] running LSTM forecast")
     new_state = dict(state)
     msg = A2AMessage(
@@ -105,7 +108,8 @@ def forecast_node(state: PipelineState, agent: InsightAgent) -> PipelineState:
 
 
 def action_node(state: PipelineState, agent: ActionAgent) -> PipelineState:
-    """Node 4: Convert insights → autonomous actions."""
+    """Orchestrator node: Convert insights into concrete autonomous reports or alerts.
+    Closes the loop by persisting results via the ActionAgent's executors."""
     log.info("[ActionNode] executing actions")
     new_state = dict(state)
     intent    = state["query_intent"]
@@ -147,7 +151,8 @@ def action_node(state: PipelineState, agent: ActionAgent) -> PipelineState:
 
 # ── Routing Logic ──────────────────────────────────────────────────────────────
 def should_forecast(state: PipelineState) -> Literal["forecast", "action"]:
-    """Run forecast if mode is 'full' or intent is revenue/executive."""
+    """Conditional router that determines if the ML forecasting step is required.
+    Routes to 'forecast' if the pipeline mode is 'full', otherwise skips to 'action'."""
     if state.get("pipeline_mode") == "full":
         return "forecast"
     return "action"
@@ -155,7 +160,8 @@ def should_forecast(state: PipelineState) -> Literal["forecast", "action"]:
 
 # ── Graph Builder ─────────────────────────────────────────────────────────────
 def build_pipeline() -> tuple:
-    """Instantiate agents and build LangGraph pipeline. Returns (graph, agents)."""
+    """Assemble the LangGraph state machine and instantiate all required agents.
+    Returns the compiled graph and a tuple of the active agent instances."""
     data_agent    = DataAgent()
     insight_agent = InsightAgent()
     action_agent  = ActionAgent()
@@ -181,12 +187,10 @@ def build_pipeline() -> tuple:
 
 # ── Run Helper ────────────────────────────────────────────────────────────────
 def run_pipeline(intent: str, params: dict = None, mode: str = "quick") -> dict:
-    """
-    High-level entry point.
-    mode: 'quick' (data+insight+action) | 'full' (adds LSTM forecast)
-    """
+    """Primary entry point to execute the autonomous retail intelligence pipeline.
+    Invokes the LangGraph orchestrator with the specified intent and operating mode."""
     compiled, _ = build_pipeline()
-
+    
     initial_state: PipelineState = {
         "query_intent"   : intent,
         "query_params"   : params or {},

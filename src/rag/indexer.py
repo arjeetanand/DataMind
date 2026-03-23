@@ -31,10 +31,8 @@ log = logging.getLogger(__name__)
 
 # ── Document Builder: Table Rows → Text ───────────────────────────────────────
 def _build_documents(conn: duckdb.DuckDBPyConnection) -> list:
-    """
-    Convert warehouse tables into LlamaIndex-compatible Document objects.
-    Each row becomes a text snippet with metadata.
-    """
+    """Transform structured warehouse tables into LlamaIndex Document objects for indexing.
+    Iterates through revenue summaries, product catalogs, and geographic aggregates to build text context."""
     try:
         from llama_index.core import Document
     except ImportError:
@@ -102,7 +100,8 @@ def _build_documents(conn: duckdb.DuckDBPyConnection) -> list:
 _GLOBAL_EMBED_MODEL = None
 
 def build_index(conn: duckdb.DuckDBPyConnection, persist_dir: str = str(Path(FAISS_INDEX).parent)):
-    """Build or reload FAISS vector index over warehouse documents."""
+    """Initialise or reload the FAISS vector index using embedded warehouse documents.
+    Sets up the global embedding model and LLM settings (Ollama/OCI) for RAG operations."""
     from llama_index.core import VectorStoreIndex, StorageContext, load_index_from_storage
     from llama_index.core.settings import Settings
     from llama_index.embeddings.huggingface import HuggingFaceEmbedding
@@ -155,19 +154,19 @@ class NL2SQLRouter:
                     "trend", "growth", "performance", "daily"]
 
     def __init__(self, conn: duckdb.DuckDBPyConnection, index):
+        """Initialise the NL2SQL router with a database connection and a vector index.
+        Prepares the query engine for similarity search and SQL generation routing."""
         self.conn  = conn
-        self.index = index
-        self.qe    = index.as_query_engine(similarity_top_k=5)
 
     def _is_sql_query(self, query: str) -> bool:
+        """Determine if a natural language query should be routed to a structured SQL path.
+        Checks for specific analytical keywords like 'total', 'sum', or 'revenue'."""
         q = query.lower()
         return any(kw in q for kw in self.SQL_KEYWORDS)
 
     def _generate_sql(self, query: str) -> str:
-        """
-        Uses LLM to translate NL to SQL based on the DuckDB schema.
-        Falls back to rule-based patterns for high-confidence common questions.
-        """
+        """Translate a natural language request into a valid DuckDB SQL string using LLM or rules.
+        Combines pattern matching with deep LLM reasoning for robust schema awareness."""
         # 1. Try rule-based first (Fast & Free)
         rule_sql = self._rule_based_sql(query)
         if rule_sql: return rule_sql
@@ -198,7 +197,8 @@ class NL2SQLRouter:
         return None
 
     def _rule_based_sql(self, query: str) -> str:
-        """Hardcoded patterns for 100% accuracy on standard dashboard questions."""
+        """Execute fast, high-confidence SQL generation for standard dashboard patterns.
+        Handles common requests like top products or monthly trends without LLM latency."""
         q = query.lower()
         
         # Pattern 1: Top Products
@@ -239,6 +239,8 @@ class NL2SQLRouter:
         return None
 
     def query(self, question: str) -> dict:
+        """Resolve a natural language question by routing to either SQL execution or semantic RAG.
+        Returns a dictionary containing the answer, source data, and execution metadata."""
         sql = self._generate_sql(question)
         if sql:
             try:

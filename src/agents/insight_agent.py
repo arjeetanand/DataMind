@@ -34,14 +34,13 @@ class InsightAgent(BaseAgent):
     """
 
     def __init__(self):
+        """Initialise the InsightAgent and prepare the RAG and forecasting connectors.
+        Sets up the DuckDB warehouse connection and placeholders for heavy indexing."""
         super().__init__(role=AgentRole.INSIGHT)
-        self._index     = None
-        self._router    = None
-        self._conn      = duckdb.connect(str(DB_PATH), read_only=True)
-        self._forecaster = None
 
     def _lazy_load_rag(self):
-        """Lazy-load LlamaIndex index (heavy import — only when needed)."""
+        """Perform a lazy-load of the LlamaIndex RAG components to save startup time.
+        Instantiates the NL2SQL router only upon the first analytics requested."""
         if self._index is None:
             try:
                 from src.rag.indexer import build_index, NL2SQLRouter
@@ -52,7 +51,8 @@ class InsightAgent(BaseAgent):
                 log.warning(f"LlamaIndex unavailable: {e}. Using LLM-only mode.")
 
     def _call_llm(self, prompt: str) -> str:
-        """Route to configured LLM provider."""
+        """Route the generation prompt to the configured LLM provider (Ollama or Cohere).
+        Ensures a consistent interface for narrative generation across different providers."""
         if LLM_PROVIDER == "ollama":
             return self._call_ollama(prompt)
         if LLM_PROVIDER == "cohere":
@@ -62,6 +62,8 @@ class InsightAgent(BaseAgent):
         return "[LLM not configured — set LLM_PROVIDER env var]"
 
     def _call_oci(self, prompt: str) -> str:
+        """Invoke the OCI GenAI service for high-performance enterprise generation.
+        Handles asynchronous communication with the OCI LLM endpoint via a local loop."""
         try:
             import asyncio
             from utils.oci_llm_service import OCILLMService
@@ -77,6 +79,8 @@ class InsightAgent(BaseAgent):
             return f"[OCI error: {e}]"
 
     def _call_ollama(self, prompt: str) -> str:
+        """Send a generation request to the local Ollama instance.
+        Optimized for local-first, privacy-conscious AI reasoning on retail data."""
         try:
             r = requests.post(
                 f"{OLLAMA_BASE_URL}/api/generate",
@@ -89,6 +93,8 @@ class InsightAgent(BaseAgent):
             return f"[Ollama error: {e}]"
 
     def _call_cohere(self, prompt: str) -> str:
+        """Invoke the Cohere API for cloud-based large language model generation.
+        Uses the 'command-r-plus' model for sophisticated business logic narratives."""
         try:
             import cohere
             co = cohere.Client(COHERE_API_KEY)
@@ -98,7 +104,8 @@ class InsightAgent(BaseAgent):
             return f"[Cohere error: {e}]"
 
     def _forecast_insight(self, payload: dict) -> dict:
-        """Run PyTorch LSTM forecast and return insight."""
+        """Coordinate the PyTorch LSTM forecast and generate a business-friendly summary.
+        Links raw predictive values with an LLM narrative for executive understanding."""
         try:
             import pandas as pd
             from src.ml.forecaster import predict
@@ -121,7 +128,8 @@ class InsightAgent(BaseAgent):
             return {"error": str(e), "type": "forecast"}
 
     def _analyse_data(self, data_result: dict) -> dict:
-        """Generate LLM narrative from DataAgent result."""
+        """Generate a grounded narrative insight from DataAgent results using RAG context.
+        Synthesizes raw database records, statistical summaries, and external index metadata."""
         self._lazy_load_rag()
         intent  = data_result.get("intent", "unknown")
         summary = data_result.get("summary", "")
@@ -159,8 +167,9 @@ Be specific with numbers. Format as plain text, no markdown."""
         }
 
     def _execute(self, message: A2AMessage) -> dict:
+        """Main dispatcher for InsightAgent, handling forecasting and analytics intents.
+        Routes messages to the appropriate internal logic based on the user's quest."""
         intent = message.intent
-        payload = message.payload
 
         if intent == "forecast":
             return self._forecast_insight(payload)

@@ -56,6 +56,8 @@ except Exception as e:
     r_client = None
 
 def _read_stream_control() -> dict:
+    """Read the current simulation state from the shared control file.
+    Used by the consumer to decide when to pause or resume polling."""
     try:
         if STREAM_CONTROL_FILE.exists():
             return json.loads(STREAM_CONTROL_FILE.read_text())
@@ -64,6 +66,8 @@ def _read_stream_control() -> dict:
     return {"is_running": False, "speed_mode": "normal"}
 
 def _connect_duckdb_with_retry(path: Path, read_only: bool = False):
+    """Establish a DuckDB connection with retry logic to handle file locks.
+    Retries multiple times if the database is busy before raising error."""
     import time
     max_retries = 60
     for i in range(max_retries):
@@ -77,7 +81,8 @@ def _connect_duckdb_with_retry(path: Path, read_only: bool = False):
             raise
 
 def _run_forecast_logic(day: str):
-    """Heavy AI logic, intended for background thread."""
+    """Internal forecasting logic that combines historical and live data.
+    Uses ClickHouse for fresh sales and DuckDB for historical context."""
     try:
         import pandas as pd
         from src.ml.forecaster import predict, MODEL_PATH, SCALER_PATH
@@ -128,6 +133,8 @@ def _run_forecast_logic(day: str):
 
 class LiveWriter:
     def __init__(self, db_path: Path = DB_PATH):
+        """Initialize the high-speed writer and set up real-time analytics.
+        Sets up DuckDB schemas and starts the TPS background monitor."""
         self.db_path = db_path
         with self._conn_with_retry() as conn:
             conn.execute(LIVE_SCHEMA_DDL)
@@ -148,7 +155,8 @@ class LiveWriter:
         log.info(f"High-Speed LiveWriter ready | rows={self._total_rows:,}")
 
     def _tps_monitor(self):
-        """Calculate throughput delta every second."""
+        """Continuously monitor throughput by calculating row-count deltas.
+        Updates the Redis 'live:tps' key every second for the dashboard."""
         while True:
             time.sleep(1.0)
             with self._lock:
@@ -159,17 +167,25 @@ class LiveWriter:
                 r_client.set("live:tps", self._tps)
 
     def _get_max_id(self, conn) -> int:
+        """Retrieve the highest transaction ID currently in DuckDB.
+        Used to maintain sequence continuity across ingestion batches."""
         r = conn.execute("SELECT COALESCE(MAX(id), 0) FROM live_sales").fetchone()
         return r[0] if r else 0
 
     def _get_row_count(self, conn) -> int:
+        """Get the total number of transactions currently in the live table.
+        Used for internal state tracking and dashboard statistics."""
         r = conn.execute("SELECT COUNT(*) FROM live_sales").fetchone()
         return r[0] if r else 0
 
     def _conn_with_retry(self, read_only=False):
+        """Helper to get a DuckDB connection with standard retry behavior.
+        Ensures consistent locking behavior across all writer operations."""
         return _connect_duckdb_with_retry(self.db_path, read_only=read_only)
 
     def write_batch(self, batch: list):
+        """Persist a batch of transactions to the Redis KPI layer.
+        Updates counters, recent transaction lists, and unique customer sets."""
         if not batch: return
         
         # 1. Update Redis (Hot KPI Layer)
@@ -207,6 +223,8 @@ class LiveWriter:
         # This reduces local disk IO and lock contention.
 
     def update_status(self, day: str):
+        """Update the simulation status in both Redis and DuckDB.
+        Tracks the current day, total ingest rows, and running state."""
         if r_client:
             r_client.set("live:status:day", day)
             r_client.set("live:status:rows", self._total_rows)
@@ -227,6 +245,8 @@ class LiveWriter:
                 log.warning(f"Status update failed: {e}")
 
     def save_forecast(self, day: str, forecast: dict):
+        """Persist ML forecast results and 7-day outlook to DuckDB.
+        Saves predicted revenue and confidence intervals for future display."""
         with self._lock:
             try:
                 with self._conn_with_retry() as conn:
@@ -245,7 +265,8 @@ class LiveWriter:
                 log.warning(f"Forecast save failed: {e}")
 
     def finalize_day(self, day: str):
-        """Calculate MAPE for a completed day by comparing ClickHouse actuals with DuckDB prediction."""
+        """Calculate MAPE for a completed day by comparing forecasts with actuals.
+        Pulls actual revenue from ClickHouse and updates DuckDB accuracy metrics."""
         if not day: return
         with self._lock:
             try:
@@ -280,6 +301,8 @@ class LiveWriter:
                 log.warning(f"Finalize day {day} failed: {e}")
 
     def mark_stopped(self):
+        """Update the global status table to reflect simulation shutdown.
+        Ensures the UI shows the stream as inactive after consumer exits."""
         with self._lock:
             try:
                 with self._conn_with_retry() as conn:
@@ -292,6 +315,8 @@ from aiokafka import AIOKafkaConsumer
 
 class RetailConsumer:
     def __init__(self):
+        """Initialize the high-level Kafka consumer and background workers.
+        Sets up the writer, signal handlers, and the forecast queue thread."""
         self._consumer = None
         self._writer = LiveWriter()
         self._running = True
@@ -307,9 +332,13 @@ class RetailConsumer:
         signal.signal(signal.SIGTERM, self._shutdown)
 
     def _shutdown(self, *_):
+        """Signal handler to initiate a graceful shutdown of the consumer.
+        Stops the polling loop and signals the background workers."""
         self._running = False
 
     def _forecast_worker(self):
+        """Background thread worker that processes the forecast queue.
+        Calls the ML logic and throttles execution to avoid CPU spikes."""
         last_run = 0
         while self._running:
             try:
@@ -330,6 +359,8 @@ class RetailConsumer:
                 log.error(f"Worker Error: {e}")
 
     async def run(self):
+        """Main consumer loop that polls Kafka and distributes work.
+        Coordinates Redis updates, status tracking, and day-start triggers."""
         log.info(f"HP-Consumer (Async) active on {TOPIC}...")
         self._consumer = AIOKafkaConsumer(
             TOPIC,

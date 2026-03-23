@@ -13,11 +13,15 @@ from config.settings import DB_PATH
 
 
 def get_conn(db_path: Path = DB_PATH) -> duckdb.DuckDBPyConnection:
+    """Create a read-only connection to the main DuckDB warehouse.
+    Used for analytical reporting and historical data retrieval."""
     return duckdb.connect(str(db_path), read_only=True)
 
 
 # ── 1. Revenue Trend (MoM with growth %) ─────────────────────────────────────
 def monthly_revenue_trend(conn=None) -> pd.DataFrame:
+    """Calculate Month-over-Month (MoM) revenue growth and order volume.
+    Uses window functions to compare current month performance with the previous month."""
     _conn = conn or get_conn()
     return _conn.execute("""
         WITH monthly AS (
@@ -42,6 +46,8 @@ def monthly_revenue_trend(conn=None) -> pd.DataFrame:
 
 # ── 2. Top-N Products by Revenue ──────────────────────────────────────────────
 def top_products(n: int = 20, conn=None) -> pd.DataFrame:
+    """Identity the top 'n' products by total revenue across all history.
+    Provides detailed unit counts, revenue, and historical ranking."""
     _conn = conn or get_conn()
     return _conn.execute(f"""
         SELECT  p.stock_code,
@@ -61,6 +67,8 @@ def top_products(n: int = 20, conn=None) -> pd.DataFrame:
 
 # ── 3. Customer RFM Summary ───────────────────────────────────────────────────
 def customer_rfm_summary(conn=None) -> pd.DataFrame:
+    """Aggregate customer counts and revenue share by segment (e.g., HIGH, MID, LOW).
+    Uses a window function to calculate the percentage of total revenue per segment."""
     _conn = conn or get_conn()
     return _conn.execute("""
         SELECT  c.customer_segment,
@@ -78,6 +86,8 @@ def customer_rfm_summary(conn=None) -> pd.DataFrame:
 
 # ── 4. Geographic Revenue Breakdown ───────────────────────────────────────────
 def geo_revenue(conn=None) -> pd.DataFrame:
+    """Break down revenue and customer reach by geographic region and country.
+    Ranks countries within their respective regions to identify top markets."""
     _conn = conn or get_conn()
     return _conn.execute("""
         SELECT  g.region,
@@ -95,7 +105,8 @@ def geo_revenue(conn=None) -> pd.DataFrame:
 
 # ── 5. Daily Sales Series (for PyTorch forecasting) ──────────────────────────
 def daily_sales_series(stock_code: str = None, conn=None) -> pd.DataFrame:
-    """Returns ordered daily revenue — feed directly into LSTM."""
+    """Generate a daily revenue time series, optionally filtered by product.
+    Optimized for feeding historical data into the LSTM forecasting model."""
     _conn = conn or get_conn()
     where = f"AND p.stock_code = '{stock_code}'" if stock_code else ""
     return _conn.execute(f"""
@@ -116,6 +127,8 @@ def daily_sales_series(stock_code: str = None, conn=None) -> pd.DataFrame:
 
 # ── 6. Reorder Signals — products trending down ───────────────────────────────
 def reorder_signals(lookback_days: int = 30, conn=None) -> pd.DataFrame:
+    """Identify products with significant sales decline over two consecutive windows.
+    Flags items that may require inventory reordering based on trend analysis."""
     _conn = conn or get_conn()
     return _conn.execute(f"""
         WITH recent AS (
@@ -158,6 +171,8 @@ def reorder_signals(lookback_days: int = 30, conn=None) -> pd.DataFrame:
 
 # ── 7. Cohort Retention ────────────────────────────────────────────────────────
 def cohort_retention(conn=None) -> pd.DataFrame:
+    """Analyze customer retention patterns by grouping users into monthly cohorts.
+    Tracks active customer counts across subsequent months since their first purchase."""
     _conn = conn or get_conn()
     return _conn.execute("""
         WITH cohorts AS (

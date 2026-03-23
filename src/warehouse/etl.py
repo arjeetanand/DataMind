@@ -40,6 +40,8 @@ REGION_MAP = {
 
 
 def _build_dim_date(df: pd.DataFrame) -> pd.DataFrame:
+    """Generate the Date Dimension table from invoice timestamps.
+    Extracts granular attributes like year, quarter, month, and weekend flags."""
     dates = df["InvoiceDate"].dt.normalize().unique()
     rows = []
     for d in sorted(dates):
@@ -60,12 +62,16 @@ def _build_dim_date(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _price_band(price: float) -> str:
+    """Categorize a product's unit price into defined market bands.
+    Labels items as LOW, MID, or HIGH based on threshold values."""
     if price < 2.0:   return "LOW"
     if price < 10.0:  return "MID"
     return "HIGH"
 
 
 def _build_dim_product(df: pd.DataFrame) -> pd.DataFrame:
+    """Construct the Product Dimension table with latest descriptions and price bands.
+    Ensures unique stock codes are mapped to surrogate keys for the star schema."""
     latest = (
         df.sort_values("InvoiceDate")
           .groupby("StockCode")
@@ -80,12 +86,16 @@ def _build_dim_product(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _rfm_segment(rfm_score: float) -> str:
+    """Assign a customer segment label based on their normalized RFM score.
+    Maps numeric scores to HIGH, MID, or LOW engagement buckets."""
     if rfm_score >= 0.66: return "HIGH"
     if rfm_score >= 0.33: return "MID"
     return "LOW"
 
 
 def _build_dim_customer(df: pd.DataFrame) -> pd.DataFrame:
+    """Create the Customer Dimension table and perform RFM analysis.
+    Calculates recency, frequency, and monetary scores to segment the customer base."""
     today = df["InvoiceDate"].max()
     rfm = df.groupby("CustomerID").agg(
         recency   = ("InvoiceDate", lambda x: (today - x.max()).days),
@@ -119,6 +129,8 @@ def _build_dim_customer(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _build_dim_geography(df: pd.DataFrame) -> pd.DataFrame:
+    """Build the Geography Dimension by mapping countries to continental regions.
+    Ensures standard geographic groupings for regional sales analysis."""
     countries = df["Country"].dropna().unique()
     rows = [{"geo_key": i + 1, "country": c,
               "region": REGION_MAP.get(c, "Other")}
@@ -128,6 +140,8 @@ def _build_dim_geography(df: pd.DataFrame) -> pd.DataFrame:
 
 def _build_fact_sales(df: pd.DataFrame, dim_date, dim_product,
                       dim_customer, dim_geography) -> pd.DataFrame:
+    """Construct the central Sales Fact table by mapping raw events to dimension keys.
+    Integrates all dimensions and calculates row-level sales metrics."""
     # Build lookup maps
     date_map    = {d.date(): k for k, d in
                    zip(dim_date["date_key"], pd.to_datetime(dim_date["full_date"]))}
@@ -155,7 +169,8 @@ def _build_fact_sales(df: pd.DataFrame, dim_date, dim_product,
 
 
 def run_etl(df: pd.DataFrame, db_path: Path = DB_PATH, recreate: bool = False) -> duckdb.DuckDBPyConnection:
-    """Full ETL: DataFrame → DuckDB star schema."""
+    """Execute the full ETL pipeline to populate the DuckDB star schema.
+    Coordinates dimension building, fact loading, and daily aggregation materialization."""
     conn = duckdb.connect(str(db_path))
 
     if recreate:

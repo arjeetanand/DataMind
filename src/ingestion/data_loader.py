@@ -34,7 +34,8 @@ DTYPES = {
 
 
 def load_raw(csv_path: Path = KAGGLE_CSV) -> pd.DataFrame:
-    """Read Online Retail II CSV with type coercion and basic cleaning."""
+    """Read the raw Online Retail II dataset and perform initial cleanup.
+    Standardizes columns, removes cancellations, and calculates initial revenue."""
     log.info(f"Reading raw CSV: {csv_path}")
     df = pd.read_csv(
         csv_path,
@@ -64,10 +65,8 @@ def load_raw(csv_path: Path = KAGGLE_CSV) -> pd.DataFrame:
 
 
 def write_partitioned_parquet(df: pd.DataFrame, out_dir: Path = PARQUET_DIR) -> None:
-    """
-    Write Parquet files partitioned by Year/Month.
-    Mirrors S3 Hive-style partitioning: year=YYYY/month=MM/data.parquet
-    """
+    """Save the cleaned DataFrame to a Hive-style partitioned Parquet lake.
+    Organizes data by Year and Month to simulate a high-performance cloud data lake."""
     log.info(f"Writing partitioned Parquet files (lake simulation)... Columns: {df.columns.tolist()}")
     table = pa.Table.from_pandas(df, preserve_index=False)
     pq.write_to_dataset(
@@ -82,7 +81,8 @@ def write_partitioned_parquet(df: pd.DataFrame, out_dir: Path = PARQUET_DIR) -> 
 
 
 def read_parquet_lake(parquet_dir: Path = PARQUET_DIR) -> pd.DataFrame:
-    """Read entire Parquet lake back into a single DataFrame."""
+    """Scan and load the entire Parquet data lake back into a pandas DataFrame.
+    Used during ETL to retrieve partitioned historical records for processing."""
     log.info(f"Reading Parquet lake from {parquet_dir}")
     df = pd.read_parquet(parquet_dir)
     log.info(f"Lake loaded: {len(df):,} rows, {df['Year'].nunique()} year(s)")
@@ -90,7 +90,8 @@ def read_parquet_lake(parquet_dir: Path = PARQUET_DIR) -> pd.DataFrame:
 
 
 def run_ingestion_pipeline() -> pd.DataFrame:
-    """End-to-end ingestion: CSV → clean → Parquet lake."""
+    """Execute the end-to-end ingestion job from raw CSV to Parquet lake.
+    Returns the cleaned DataFrame ready for downstream warehouse ETL or analysis."""
     df = load_raw()
     write_partitioned_parquet(df)
     return df

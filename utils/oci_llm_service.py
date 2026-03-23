@@ -10,6 +10,8 @@ import base64
 
 class OCILLMService:
     def __init__(self):
+        """Initialise the OCI GenAI service with environment-based authentication and config.
+        Sets up the ChatOCIGenAI client with compartment IDs and endpoint specifications."""
         self.llm = ChatOCIGenAI(
             model_id=os.getenv("OCI_GENAI_MODEL_ID"),
             compartment_id=os.getenv("OCI_GENAI_COMPARTMENT_ID"),

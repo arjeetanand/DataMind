@@ -31,12 +31,15 @@ class DataAgent(BaseAgent):
     }
 
     def __init__(self, db_path: Path = DB_PATH):
+        """Initialise the DataAgent with a read-only DuckDB warehouse connection.
+        Sets up the agent's role and prepares it for SQL-based retrieval."""
         super().__init__(role=AgentRole.DATA)
         self.conn = duckdb.connect(str(db_path), read_only=True)
 
     def _execute(self, message: A2AMessage) -> dict:
+        """Process an incoming data retrieval request by mapping intent to SQL queries.
+        Returns a serialised result containing raw records and a concise summary."""
         intent = message.intent
-        params = message.payload
 
         if intent not in self.INTENT_MAP:
             raise ValueError(f"Unknown intent '{intent}'. Valid: {list(self.INTENT_MAP)}")
@@ -64,7 +67,8 @@ class DataAgent(BaseAgent):
         }
 
     def _summarise(self, intent: str, df) -> str:
-        """Generate a 1-line statistical summary for downstream agents."""
+        """Generate a human-readable 1-line statistical summary of the retrieved data.
+        Provides high-level context for downstream analysis and insight generation."""
         if df.empty:
             return "No data available."
         if intent == "revenue_trend":

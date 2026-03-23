@@ -35,6 +35,8 @@ class DemandLSTM(nn.Module):
     def __init__(self, input_size: int = 8, hidden_size: int = HIDDEN_SIZE,
                  num_layers: int = NUM_LAYERS, pred_len: int = PRED_LEN,
                  dropout: float = 0.2):
+        """Initialize the LSTM model with stacked layers and multi-head attention.
+        Sets up the temporal encoder and the linear projection head for forecasting."""
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers  = num_layers
@@ -62,6 +64,8 @@ class DemandLSTM(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Perform a forward pass through the LSTM and attention layers.
+        Extracts temporal features and projects them to the future forecast horizon."""
         # x: (batch, seq_len, input_size)
         lstm_out, _ = self.lstm(x)                      # (batch, seq_len, hidden)
         attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)
@@ -73,14 +77,20 @@ class DemandLSTM(nn.Module):
 # ── Dataset ───────────────────────────────────────────────────────────────────
 class TimeSeriesDataset(torch.utils.data.Dataset):
     def __init__(self, data: np.ndarray, seq_len: int, pred_len: int):
+        """Initialize the time series dataset for PyTorch training.
+        Stores the normalized data and defines lookback and prediction lengths."""
         self.data     = data
         self.seq_len  = seq_len
         self.pred_len = pred_len
 
     def __len__(self):
+        """Calculate the total number of sliding window samples available.
+        Ensures the dataset length accounts for both sequence and prediction lengths."""
         return len(self.data) - self.seq_len - self.pred_len + 1
 
     def __getitem__(self, idx):
+        """Retrieve a single sequence-target pair for model training.
+        Extracts a sequence of length 'seq_len' and a target of 'pred_len' days."""
         x = self.data[idx : idx + self.seq_len]                   # (seq_len, features)
         y = self.data[idx + self.seq_len : idx + self.seq_len + self.pred_len, 0]  # revenue only
         return torch.FloatTensor(x), torch.FloatTensor(y)
@@ -88,6 +98,8 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
 
 # ── Training ──────────────────────────────────────────────────────────────────
 def train(df: pd.DataFrame, epochs: int = EPOCHS) -> DemandLSTM:
+    """Implement a full training loop with early stopping and cyclical encoding.
+    Saves the best model state and normalized scaler to disk for later inference."""
     """Train LSTM on daily sales DataFrame."""
     # Feature Engineering
     df["ds"] = pd.to_datetime(df["ds"])
@@ -181,6 +193,8 @@ def train(df: pd.DataFrame, epochs: int = EPOCHS) -> DemandLSTM:
 
 # ── Inference ──────────────────────────────────────────────────────────────────
 def predict(df: pd.DataFrame, model: DemandLSTM = None) -> dict:
+    """Generate a future revenue forecast using the trained LSTM engine.
+    Applies Monte Carlo dropout for robust uncertainty estimation and confidence intervals."""
     """
     Given the last SEQ_LEN rows of daily_sales_series, forecast next PRED_LEN days.
     Returns dict with dates, predicted_revenue, confidence_interval.

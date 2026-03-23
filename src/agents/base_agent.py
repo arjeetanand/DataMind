@@ -51,18 +51,24 @@ class A2AMessage:
     trace       : list = field(default_factory=list)   # execution trace for observability
 
     def succeed(self, result: Any) -> "A2AMessage":
+        """Mark the message as successfully processed and store the result.
+        Appends a success indicator to the execution trace for observability."""
         self.status = MessageStatus.SUCCESS
         self.result = result
         self.trace.append(f"[{self.receiver}] SUCCESS at {time.strftime('%H:%M:%S')}")
         return self
 
     def fail(self, error: str) -> "A2AMessage":
+        """Mark the message as failed and record the error description.
+        Appends the error details to the execution trace for debugging."""
         self.status = MessageStatus.ERROR
         self.error  = error
         self.trace.append(f"[{self.receiver}] ERROR: {error}")
         return self
 
     def to_dict(self) -> dict:
+        """Convert the message envelope into a serialisable dictionary.
+        Used for logging, inter-process communication, and API responses."""
         return {
             "message_id" : self.message_id,
             "sender"     : self.sender,
@@ -82,14 +88,13 @@ class BaseAgent(ABC):
     """
 
     def __init__(self, role: AgentRole, max_retries: int = 3):
+        """Initialise a new agent with a specific architectural role.
+        Sets up the internal logger and retry threshold for operations."""
         self.role        = role
-        self.max_retries = max_retries
-        self.log         = logging.getLogger(f"datamind.{role}")
 
     def handle(self, message: A2AMessage) -> A2AMessage:
-        """
-        Public entry point. Validates receiver, runs with retry.
-        """
+        """Execute the agent's logic on a message with built-in retry safety.
+        Validates the receiver and coordinates the internal _execute call."""
         if message.receiver != self.role:
             return message.fail(f"Wrong receiver: expected {self.role}, got {message.receiver}")
 

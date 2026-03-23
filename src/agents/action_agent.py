@@ -29,12 +29,14 @@ class ActionAgent(BaseAgent):
     """
 
     def __init__(self):
+        """Initialise the ActionAgent and set up an internal action log.
+        Registers the agent's role and prepares the reports directory for persisting outputs."""
         super().__init__(role=AgentRole.ACTION)
-        self._action_log: list = []
 
     def _execute(self, message: A2AMessage) -> dict:
+        """Dispatch incoming action requests to specific executor methods based on intent.
+        Coordinates between alerts, executive reporting, and anomaly notifications."""
         intent  = message.intent
-        payload = message.payload
 
         if intent == "reorder_alert":
             return self._generate_reorder_alerts(payload)
@@ -49,6 +51,8 @@ class ActionAgent(BaseAgent):
 
     # ── Reorder Alerts ────────────────────────────────────────────────────────
     def _generate_reorder_alerts(self, payload: dict) -> dict:
+        """Generate product reorder alerts based on recent sales decline metrics.
+        Saves alert details to a JSON reports file and returns a summary for the UI."""
         reorder_data = payload.get("data_result", {}).get("data", [])
         insight      = payload.get("insight", {})
 
@@ -87,6 +91,8 @@ class ActionAgent(BaseAgent):
 
     # ── Executive Report ──────────────────────────────────────────────────────
     def _generate_executive_report(self, payload: dict) -> dict:
+        """Compose a high-level executive report in Markdown format for stakeholders.
+        Combines historical revenue narratives with future demand forecast projections."""
         insights    = payload.get("insights") or {}
         forecast    = payload.get("forecast") or {}
         now         = datetime.datetime.now()
@@ -132,6 +138,8 @@ Generated: {now.strftime("%Y-%m-%d %H:%M")}
 
     # ── Anomaly Alert ─────────────────────────────────────────────────────────
     def _generate_anomaly_alert(self, payload: dict) -> dict:
+        """Scan transaction trends to identify and alert on significant revenue anomalies.
+        Flags spikes or drops greater than 50% and persists the logs for review."""
         data     = payload.get("data_result", {}).get("data", [])
         insight  = payload.get("insight", {})
 
@@ -166,6 +174,8 @@ Generated: {now.strftime("%Y-%m-%d %H:%M")}
 
     # ── Forecast Report ───────────────────────────────────────────────────────
     def _generate_forecast_report(self, payload: dict) -> dict:
+        """Encapsulate ML demand forecasts into a serialised JSON report.
+        Stores predicted horizons, confidence intervals, and LLM narratives for record-keeping."""
         forecast = payload.get("forecast", {})
         narrative = forecast.get("narrative", "")
 
@@ -188,4 +198,6 @@ Generated: {now.strftime("%Y-%m-%d %H:%M")}
         return {"action": "forecast_report", "saved_to": str(path), "report": report}
 
     def get_action_log(self) -> list:
+        """Retrieve the internal history of all actions executed by this agent.
+        Provides an audit trail of generated reports, alerts, and notifications."""
         return self._action_log

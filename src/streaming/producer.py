@@ -36,6 +36,8 @@ log = logging.getLogger("datamind.producer")
 
 
 def _read_stream_control() -> dict:
+    """Read the simulation control JSON file from disk.
+    Returns the parsed configuration or default 'stopped' state."""
     try:
         if STREAM_CONTROL_FILE.exists():
             return json.loads(STREAM_CONTROL_FILE.read_text())
@@ -45,6 +47,8 @@ def _read_stream_control() -> dict:
 
 
 def _write_stream_control(is_running: bool, speed: str) -> None:
+    """Atomic write to the simulation control file.
+    Updates running state and speed mode for both producer and consumer."""
     STREAM_CONTROL_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = STREAM_CONTROL_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps({
@@ -56,6 +60,8 @@ def _write_stream_control(is_running: bool, speed: str) -> None:
 
 
 def _load_and_clean(csv_path: Path) -> pd.DataFrame:
+    """Load the raw retail dataset and perform initial cleaning.
+    Removes cancellations, null IDs, and filters for positive revenue rows."""
     log.info(f"Loading {csv_path} ...")
     df = pd.read_csv(
         csv_path,
@@ -79,6 +85,8 @@ from aiokafka import AIOKafkaProducer
 
 class RetailProducer:
     def __init__(self, initial_speed: str = "normal"):
+        """Initialize the Kafka producer and setup signal handlers.
+        Ensures the simulation control begins in a stopped state."""
         self._producer = None
         self._running = True
         _write_stream_control(False, initial_speed)
@@ -86,10 +94,14 @@ class RetailProducer:
         signal.signal(signal.SIGTERM, self._shutdown)
 
     def _shutdown(self, *_):
+        """Signal handler to gracefully stop the streaming loop.
+        Ensures the producer is flushed and stopped before exit."""
         log.info("Shutdown signal received — draining producer...")
         self._running = False
 
     async def stream(self, csv_path: Path = KAGGLE_CSV):
+        """Main streaming loop that groups data by day and emits Kafka events.
+        Respects speed delays and simulation control pauses between days."""
         df = _load_and_clean(csv_path)
         grouped = df.groupby("simulated_day")
         all_days = sorted(grouped.groups.keys())
