@@ -293,18 +293,39 @@ def test_reset(base):
         return
 
     # Verify KPIs are zero
-    time.sleep(1.5)
+    hr()
+    info("Deep Verification (Checking for stale data)...")
+    time.sleep(1.0)
     kpis = get(base, "/live/kpis") or {}
     rev  = kpis.get("total_live_revenue", -1)
+    txns = kpis.get("total_txns", -1)
+    cust = kpis.get("unique_customers", -1)
     tps  = kpis.get("tps", -1)
-    if rev == 0:
-        ok("Post-reset: total_live_revenue = 0 ✔")
+
+    fail_count = 0
+    if rev == 0:   ok(f"Revenue cleared: £{rev}")
+    else:          fail(f"Revenue PERSISTED: £{rev}"); fail_count += 1
+
+    if txns == 0:  ok(f"Transactions cleared: {txns}")
+    else:          fail(f"Transactions PERSISTED: {txns}"); fail_count += 1
+    
+    if cust == 0:  ok(f"Customers cleared: {cust}")
+    else:          fail(f"Customers PERSISTED: {cust}"); fail_count += 1
+
+    if tps == 0:   ok(f"TPS cleared: {tps}")
+    else:          fail(f"TPS PERSISTED: {tps}"); fail_count += 1
+
+    # Check status
+    stats = get(base, "/live/status") or {}
+    mape = stats.get("mape")
+    if mape is None or mape == 0: ok(f"MAPE cleared: {mape}")
+    else:          fail(f"MAPE PERSISTED: {mape}%"); fail_count += 1
+
+    if fail_count == 0:
+        hdr("RESET VERIFIED: ALL DATA LAYERS PURGED ✔")
     else:
-        warn(f"Post-reset: total_live_revenue = {rev} (may take a moment to propagate)")
-    if tps == 0:
-        ok("Post-reset: tps = 0 ✔  (Bug 2 fix confirmed)")
-    else:
-        warn(f"Post-reset: tps = {tps} (should be 0 — live:tps not cleared?)")
+        hdr(f"RESET FAILED: {fail_count} metrics remained stale ✘")
+        warn("Possible causes: 1. Ghost processes still writing, 2. Redis/Clickhouse connection issues")
 
 
 def test_transactions(base):

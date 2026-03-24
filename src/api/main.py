@@ -83,16 +83,13 @@ async def _reset_kafka_topic() -> dict:
 def _clear_clickhouse_live_data():
     """Truncate the ClickHouse hot table to remove all live streaming data.
     Called during reset to purge ingested events that bypass DuckDB writes."""
+    import clickhouse_connect
+    client = clickhouse_connect.get_client(host="localhost", port=8123)
     try:
-        import clickhouse_connect
-        client = clickhouse_connect.get_client(host="localhost", port=8123)
-        try:
-            client.command("TRUNCATE TABLE IF EXISTS retail_events_hot")
-            log.info("ClickHouse retail_events_hot truncated successfully.")
-        finally:
-            client.close()
-    except Exception as e:
-        log.warning(f"ClickHouse clear failed: {e}")
+        client.command("TRUNCATE TABLE IF EXISTS retail_events_hot")
+        log.info("ClickHouse retail_events_hot truncated successfully.")
+    finally:
+        client.close()
 
 # --- Generic Memory Cache ---
 _DATA_CACHE = {}
@@ -417,7 +414,11 @@ async def reset_live_data(request: ResetRequest):
             """)
 
         # 4. Wipe ClickHouse hot table (source for live charts/transactions)
-        _clear_clickhouse_live_data()
+        try:
+            _clear_clickhouse_live_data()
+            clickhouse_cleanup = {"ok": True, "error": None}
+        except Exception as e:
+            clickhouse_cleanup = {"ok": False, "error": str(e)}
         
         # 5. Purge Kafka Topic
         await _reset_kafka_topic()
