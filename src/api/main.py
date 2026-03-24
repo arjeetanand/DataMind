@@ -23,7 +23,7 @@ from src.warehouse.queries import (
     reorder_signals, customer_rfm_summary,
 )
 from src.streaming.live_queries import (
-    get_rolling_revenue, get_recent_transactions,
+    get_recent_transactions,
     get_forecast_vs_actual, get_stream_status,
     get_live_kpis, get_live_top_products, get_live_geo_revenue,
 )
@@ -302,12 +302,6 @@ def live_kpis():
     Optimized for sub-millisecond status dashboard updates."""
     return _get_cached_data("kpis", get_live_kpis, ttl=1.0)
 
-@app.get("/live/revenue")
-def live_revenue(window: int = 500):
-    """Get the latest rolling revenue timeseries for real-time charting.
-    Aggregates data across the specified transaction window from ClickHouse."""
-    df = _get_cached_data(f"revenue_{window}", get_rolling_revenue, ttl=1.5, window_txns=window)
-    return {"data": df.fillna(0).to_dict(orient="records"), "rows": len(df)}
 
 
 @app.get("/live/transactions")

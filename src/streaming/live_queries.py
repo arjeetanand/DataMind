@@ -30,28 +30,6 @@ def get_redis_client():
     Returns a client configured for decoding responses to strings."""
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
 
-def get_rolling_revenue(window_txns: int = 500, conn=None) -> pd.DataFrame:
-    """Fetch rolling and cumulative revenue metrics from ClickHouse.
-    Aggregates data across the most recent transaction window."""
-    client = get_ch_client()
-    try:
-        query = f"""
-            SELECT
-                simulated_day,
-                SUM(revenue)       AS daily_revenue,
-                COUNT(*)           AS txn_count,
-                SUM(SUM(revenue)) OVER (ORDER BY simulated_day) AS cumulative_revenue
-            FROM (
-                SELECT * FROM retail_events_hot
-                ORDER BY ingested_at DESC
-                LIMIT {window_txns}
-            )
-            GROUP BY simulated_day
-            ORDER BY simulated_day
-        """
-        return client.query_df(query)
-    finally:
-        client.close()
 
 def get_recent_transactions(n: int = 25, conn=None) -> pd.DataFrame:
     """Retrieve the 'n' most recent transactions from Redis with ClickHouse fallback.

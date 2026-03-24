@@ -162,7 +162,6 @@ export default function LiveFeed() {
     const [kpis, setKpis] = useState(null);
     const [transactions, setTransactions] = useState([]);
     const [forecastData, setForecastData] = useState([]);
-    const [revenueData, setRevenueData] = useState([]);
     const [topProducts, setTopProducts] = useState([]);
     const [forecastOutlook, setForecastOutlook] = useState([]);
     const [geoRevenue, setGeoRevenue] = useState([]);
@@ -174,12 +173,11 @@ export default function LiveFeed() {
 
     const fetchAll = useCallback(async () => {
         try {
-            const [s, k, t, f, r, p, p2, g] = await Promise.all([
+            const [s, k, t, f, p, p2, g] = await Promise.all([
                 fetch(`${API}/live/status`).then(r => r.json()).catch(() => null),
                 fetch(`${API}/live/kpis`).then(r => r.json()).catch(() => null),
                 fetch(`${API}/live/transactions?n=20`).then(r => r.json()).catch(() => null),
                 fetch(`${API}/live/forecast-vs-actual`).then(r => r.json()).catch(() => null),
-                fetch(`${API}/live/revenue?window=200`).then(r => r.json()).catch(() => null),
                 fetch(`${API}/live/top-products?n=5`).then(r => r.json()).catch(() => null),
                 fetch(`${API}/live/forecast-outlook`).then(r => r.json()).catch(() => null),
                 fetch(`${API}/live/geo-revenue?n=8`).then(r => r.json()).catch(() => null),
@@ -193,11 +191,6 @@ export default function LiveFeed() {
                 day: d.day?.slice(5) || d.day,
                 actual: d.actual || 0,
                 predicted: d.predicted || 0,
-            })));
-            if (r?.data) setRevenueData(r.data.map(d => ({
-                ...d,
-                day: String(d.simulated_day).slice(5),
-                rev: d.daily_revenue || 0,
             })));
             if (p?.data) setTopProducts(p.data);
             if (p2?.data) setForecastOutlook(p2.data.map(d => ({
@@ -467,29 +460,6 @@ export default function LiveFeed() {
                             )}
                         </div>
 
-                        {revenueData.length > 0 && (
-                            <div className="glass" style={{ padding: "24px", borderRadius: "20px" }}>
-                                <h3 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "4px" }}>Daily Revenue (Streaming Window)</h3>
-                                <p style={{ color: "var(--text-dim)", fontSize: "13px", marginBottom: "20px" }}>Revenue for most recent streamed days</p>
-                                <div style={{ height: "200px" }}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={revenueData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-                                            <defs>
-                                                <linearGradient id="liveGrad" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="var(--accent-teal)" stopOpacity={0.3} />
-                                                    <stop offset="95%" stopColor="var(--accent-teal)" stopOpacity={0} />
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-ghost)" vertical={false} />
-                                            <XAxis dataKey="day" fontSize={10} stroke="var(--text-dim)" tick={{ fill: "var(--text-dim)" }} interval="preserveStartEnd" />
-                                            <YAxis fontSize={10} stroke="var(--text-dim)" tick={{ fill: "var(--text-dim)" }} tickFormatter={v => `£${Math.round(v / 1000)}k`} />
-                                            <Tooltip contentStyle={{ background: "var(--surface-high)", border: "1px solid var(--border-ghost)", borderRadius: "8px", fontSize: "12px" }} formatter={(v) => [fmt(v), "Revenue"]} />
-                                            <Area type="monotone" dataKey="rev" stroke="var(--accent-teal)" strokeWidth={2} fill="url(#liveGrad)" />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                        )}
 
                         {geoRevenue.length > 0 && (
                             <div className="glass" style={{ padding: "24px", borderRadius: "20px" }}>
