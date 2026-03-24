@@ -50,6 +50,50 @@ def _live_conn(read_only: bool = True):
                 continue
             raise HTTPException(503, f"Database busy/locked: {e}")
 
+
+async def _reset_kafka_topic() -> dict:
+    """Purge all messages from the retail-events topic by recreating it.
+    Ensures that a simulation reset starts from an empty message queue."""
+    import asyncio
+    from aiokafka.admin import AIOKafkaAdminClient, NewTopic
+    topic_name = "retail-events-v1"
+    bootstrap_servers = "localhost:9092"
+    admin = AIOKafkaAdminClient(bootstrap_servers=bootstrap_servers)
+    try:
+        await admin.start()
+        # Delete if exists
+        try:
+            await admin.delete_topics([topic_name])
+            await asyncio.sleep(2.0)  # Non-blocking wait for Kafka to propagate deletion
+        except Exception as e:
+            log.warning(f"Kafka topic delete failed (may not exist yet): {e}")
+        
+        # Recreate
+        new_topic = NewTopic(name=topic_name, num_partitions=1, replication_factor=1)
+        await admin.create_topics([new_topic])
+        log.info(f"Kafka topic '{topic_name}' recreated successfully.")
+        return {"ok": True}
+    except Exception as e:
+        log.warning(f"Kafka reset failed: {e}")
+        return {"ok": False, "error": str(e)}
+    finally:
+        await admin.close()
+
+
+def _clear_clickhouse_live_data():
+    """Truncate the ClickHouse hot table to remove all live streaming data.
+    Called during reset to purge ingested events that bypass DuckDB writes."""
+    try:
+        import clickhouse_connect
+        client = clickhouse_connect.get_client(host="localhost", port=8123)
+        try:
+            client.command("TRUNCATE TABLE IF EXISTS retail_events_hot")
+            log.info("ClickHouse retail_events_hot truncated successfully.")
+        finally:
+            client.close()
+    except Exception as e:
+        log.warning(f"ClickHouse clear failed: {e}")
+
 # --- Generic Memory Cache ---
 _DATA_CACHE = {}
 _MAINTENANCE_MODE = False
@@ -348,12 +392,13 @@ def set_speed(request: SpeedControlRequest):
 
 
 @app.post("/live/reset")
-def reset_live_data(request: ResetRequest):
+async def reset_live_data(request: ResetRequest):
     """Wipe all live data, Redis KPIs, and DuckDB stream state.
     Requires explicit confirmation; used to restart the simulation from scratch."""
     if not request.confirm:
         raise HTTPException(400, "Send confirm=true to wipe live data")
     global _MAINTENANCE_MODE, _DATA_CACHE
+    clickhouse_cleanup = {"ok": False, "error": None}
     try:
         # 1. Enable Maintenance Mode & force stop simulation
         _MAINTENANCE_MODE = True
@@ -370,22 +415,52 @@ def reset_live_data(request: ResetRequest):
                 INSERT OR REPLACE INTO live_stream_status (id, is_running, speed_mode, current_day, total_rows)
                 VALUES (1, false, 'normal', NULL, 0)
             """)
+
+        # 4. Wipe ClickHouse hot table (source for live charts/transactions)
+        _clear_clickhouse_live_data()
         
-        # 4. Cleanup Redis
+        # 5. Purge Kafka Topic
+        await _reset_kafka_topic()
+
+        # 6. Cleanup Redis
         try:
             import redis
             r = redis.Redis(host="localhost", port=6379, db=0)
-            r.delete("live:kpi:revenue", "live:kpi:orders", "live:kpi:units", "live:transactions", 
-                     "live:status:day", "live:status:rows", "live:unique_customers", "live:tps")
-        except: pass
+            r.delete(
+                "live:kpi:revenue", "live:kpi:orders", "live:kpi:units",
+                "live:transactions", "live:status:day", "live:status:rows",
+                "live:unique_customers", "live:tps",
+            )
+            log.info("Redis KPI keys cleared.")
+        except Exception as e:
+            log.warning(f"Redis cleanup failed: {e}")
 
-        # 5. Cleanup Cache
+        # 6. Cleanup Cache
         with _DATA_LOCK:
             _DATA_CACHE.clear()
+
+        # 7. Second-pass cleanup for any late background forecast writes
+        time.sleep(0.5)
+        with _live_conn(read_only=False) as conn:
+            conn.execute("DELETE FROM live_forecasts")
+            conn.execute("DELETE FROM live_forecast_outlook")
+            conn.execute("""
+                INSERT OR REPLACE INTO live_stream_status (id, is_running, speed_mode, current_day, total_rows)
+                VALUES (1, false, 'normal', NULL, 0)
+            """)
+
         if STREAM_CONTROL_FILE.exists():
             _set_stream_control(is_running=False, speed_mode="normal")
-            
-        return {"status": "ok", "message": "Live tables reset successfully."}
+
+        message = "Live data reset successfully."
+        if not clickhouse_cleanup.get("ok"):
+            message += " (Warning: ClickHouse hot table cleanup failed; some chart data may persist until ClickHouse is reachable.)"
+
+        return {
+            "status": "ok",
+            "message": message,
+            "clickhouse_cleared": bool(clickhouse_cleanup.get("ok")),
+        }
     except Exception as e:
         log.error(f"Reset failed: {e}")
         raise HTTPException(500, f"Reset failed: {e}")

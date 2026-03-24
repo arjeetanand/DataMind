@@ -123,6 +123,18 @@ def _build_dim_customer(df: pd.DataFrame) -> pd.DataFrame:
     rfm["customer_segment"] = rfm["rfm_score"].apply(_rfm_segment)
     rfm["customer_key"] = range(1, len(rfm) + 1)
     rfm.rename(columns={"CustomerID": "customer_id"}, inplace=True)
+    
+    # ADDED: Special surrogate for Guest transactions (missing CustomerID)
+    guest_key = len(rfm) + 1
+    guest_row = pd.DataFrame([{
+        "customer_key": guest_key,
+        "customer_id": "GUEST",
+        "first_seen": None,
+        "last_seen": None,
+        "country": "Unknown",
+        "customer_segment": "LOW"
+    }])
+    rfm = pd.concat([rfm, guest_row], ignore_index=True)
 
     return rfm[["customer_key", "customer_id", "first_seen", "last_seen",
                 "country", "customer_segment"]]
@@ -152,10 +164,16 @@ def _build_fact_sales(df: pd.DataFrame, dim_date, dim_product,
     fact = df.copy()
     fact["date_key"]     = fact["InvoiceDate"].dt.date.map(date_map)
     fact["product_key"]  = fact["StockCode"].map(prod_map)
+    
+    # Handle Guest Transactions: Map null/empty CustomerIDs to 'GUEST'
+    fact["CustomerID"]   = fact["CustomerID"].fillna("GUEST").replace({"": "GUEST"})
     fact["customer_key"] = fact["CustomerID"].map(cust_map)
+    
     fact["geo_key"]      = fact["Country"].map(geo_map)
-    fact.dropna(subset=["date_key", "product_key", "customer_key", "geo_key"],
-                inplace=True)
+
+    # REFINED: Drop only if critical keys (date/product) are missing.
+    # Customer and Geo are now more robustly handled.
+    fact.dropna(subset=["date_key", "product_key"], inplace=True)
 
     for col in ["date_key", "product_key", "customer_key", "geo_key"]:
         fact[col] = fact[col].astype(int)

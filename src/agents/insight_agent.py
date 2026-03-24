@@ -37,6 +37,9 @@ class InsightAgent(BaseAgent):
         """Initialise the InsightAgent and prepare the RAG and forecasting connectors.
         Sets up the DuckDB warehouse connection and placeholders for heavy indexing."""
         super().__init__(role=AgentRole.INSIGHT)
+        self._conn = duckdb.connect(str(DB_PATH), read_only=True)
+        self._index = None
+        self._router = None
 
     def _lazy_load_rag(self):
         """Perform a lazy-load of the LlamaIndex RAG components to save startup time.
@@ -170,6 +173,7 @@ Be specific with numbers. Format as plain text, no markdown."""
         """Main dispatcher for InsightAgent, handling forecasting and analytics intents.
         Routes messages to the appropriate internal logic based on the user's quest."""
         intent = message.intent
+        payload = message.payload or {}
 
         if intent == "forecast":
             return self._forecast_insight(payload)

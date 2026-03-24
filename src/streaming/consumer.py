@@ -82,7 +82,7 @@ def _connect_duckdb_with_retry(path: Path, read_only: bool = False):
 
 def _run_forecast_logic(day: str):
     """Internal forecasting logic that combines historical and live data.
-    Uses ClickHouse for fresh sales and DuckDB for historical context."""
+    Uses ClickHouse for fresh sales and DuckDB for historical context, with live scale correction."""
     try:
         import pandas as pd
         from src.ml.forecaster import predict, MODEL_PATH, SCALER_PATH
@@ -117,12 +117,42 @@ def _run_forecast_logic(day: str):
             else:
                 df_hist = df_hist_base
 
-        if len(df_hist) < 2: return None
+        # Filter out the 'current_day' (which is just starting) to prevent seeing a 'zero revenue' point.
+        df_hist["ds"] = pd.to_datetime(df_hist["ds"]).dt.date
+        trigger_date = pd.to_datetime(day).date()
+        df_hist = df_hist[df_hist["ds"] < trigger_date]
+
+        if len(df_hist) < 2:
+            return None
         
         df_hist = df_hist.set_index("ds")
+        # Log revenue scale so we can diagnose scale mismatches
+        recent_actual_rev = float(df_hist["y"].tail(7).mean())
+        log.info(f"Forecasting for {day} | data={df_hist.index[0]}→{df_hist.index[-1]} | recent_avg_rev={recent_actual_rev:,.0f}")
+
         result = predict(df_hist)
+
+        # ── Live Scale Correction ──────────────────────────────────────────────
+        # The LSTM was trained on historical data that may have a different revenue
+        # magnitude than the live simulation.  We compute a scale factor from the
+        # ratio of recent *actual* ClickHouse daily totals vs. recent *predicted*
+        # values so that future forecasts are anchored to the live revenue scale.
+        raw_forecast_avg = float(pd.Series(result["forecast"]).mean())
+        if raw_forecast_avg > 0 and recent_actual_rev > 0:
+            scale_factor = recent_actual_rev / raw_forecast_avg
+            # Clamp to a sane range (0.1x – 50x) to avoid runaway correction
+            scale_factor = max(0.1, min(50.0, scale_factor))
+            if abs(scale_factor - 1.0) > 0.05:   # Only apply if more than 5% off
+                log.info(
+                    f"Applying forecast scale correction: {scale_factor:.3f}x "
+                    f"(raw_avg={raw_forecast_avg:,.0f}, actual_avg={recent_actual_rev:,.0f})"
+                )
+                result["forecast"] = [round(v * scale_factor, 2) for v in result["forecast"]]
+                result["lower_ci"] = [round(v * scale_factor, 2) for v in result["lower_ci"]]
+                result["upper_ci"] = [round(v * scale_factor, 2) for v in result["upper_ci"]]
+
         return {
-            "dates": result["dates"],
+            "dates":    result["dates"],
             "forecast": result["forecast"],
             "lower_ci": result["lower_ci"],
             "upper_ci": result["upper_ci"],
@@ -182,6 +212,10 @@ class LiveWriter:
         """Helper to get a DuckDB connection with standard retry behavior.
         Ensures consistent locking behavior across all writer operations."""
         return _connect_duckdb_with_retry(self.db_path, read_only=read_only)
+
+    def _connect_duckdb_with_retry(self, path=None, read_only=False):
+        """DEFENSIVE ALIAS: Handles legacy or phantom calls to the old connection method."""
+        return self._conn_with_retry(read_only=read_only)
 
     def write_batch(self, batch: list):
         """Persist a batch of transactions to the Redis KPI layer.
@@ -243,31 +277,40 @@ class LiveWriter:
                     """, [day, self._total_rows, is_running, speed_mode, self._days_done, round(self._mape_sum/max(1,self._days_done), 2)])
             except Exception as e:
                 log.warning(f"Status update failed: {e}")
-
     def save_forecast(self, day: str, forecast: dict):
         """Persist ML forecast results and 7-day outlook to DuckDB.
         Saves predicted revenue and confidence intervals for future display."""
         with self._lock:
             try:
+                # IMPORTANT: index 0 of the forecast is for TOMORROW relative to the data end.
+                # If we triggered for Day N, the first prediction is for Day N+1.
+                # We must use the actual date from the forecast result.
+                pred_day = forecast["dates"][0]
+                
                 with self._conn_with_retry() as conn:
                     # History
                     conn.execute("INSERT OR REPLACE INTO live_forecasts VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)", [
-                        day, forecast["forecast"][0], forecast["lower_ci"][0], forecast["upper_ci"][0]
+                        pred_day, forecast["forecast"][0], forecast["lower_ci"][0], forecast["upper_ci"][0]
                     ])
                     # Outlook
                     for i in range(len(forecast["forecast"])):
                         f_date = forecast["dates"][i] if i < len(forecast["dates"]) else None
                         if not f_date: continue
                         conn.execute("INSERT OR REPLACE INTO live_forecast_outlook VALUES (?, ?, ?, ?, ?)", 
-                                     [day, f_date, forecast["forecast"][i], forecast["lower_ci"][i], forecast["upper_ci"][i]])
-                log.info(f"Cloud update: Forecast for {day} persisted.")
+                                     [pred_day, f_date, forecast["forecast"][i], forecast["lower_ci"][i], forecast["upper_ci"][i]])
+                log.info(f"Cloud update: Forecast for {pred_day} persisted (triggered on {day}).")
             except Exception as e:
                 log.warning(f"Forecast save failed: {e}")
+
 
     def finalize_day(self, day: str):
         """Calculate MAPE for a completed day by comparing forecasts with actuals.
         Pulls actual revenue from ClickHouse and updates DuckDB accuracy metrics."""
         if not day: return
+        
+        # Give ClickHouse / Kafka Materialized View a moment to finish indexing the last batch
+        time.sleep(2.0)
+        
         with self._lock:
             try:
                 # 1. Get Actual Revenue from ClickHouse
@@ -278,12 +321,16 @@ class LiveWriter:
                 finally:
                     ch_client.close()
 
-                if actual <= 0: return
+                if actual <= 0: 
+                    log.info(f"No actual revenue found for {day} (skipped MAPE).")
+                    return
 
                 # 2. Get Predicted Revenue from DuckDB
                 with self._conn_with_retry() as conn:
                     row = conn.execute("SELECT predicted_revenue FROM live_forecasts WHERE simulated_day = ?", [day]).fetchone()
-                    if not row: return
+                    if not row: 
+                        log.info(f"No forecast found for {day} (skipped MAPE).")
+                        return
                     predicted = row[0]
 
                 # 3. Calculate APE and update counters
@@ -345,12 +392,13 @@ class RetailConsumer:
                 day = self._forecast_queue.get(timeout=1.0)
                 if time.time() - last_run < FORECAST_THROTTLE_SEC:
                     continue
-                
-                log.info(f"Worker Trigger: Forecasting for {day}...")
-                res = _run_forecast_logic(day)
-                if res:
-                    self._writer.save_forecast(day, res)
-                    last_run = time.time()
+                try:
+                    res = _run_forecast_logic(day)
+                    if res:
+                        self._writer.save_forecast(day, res)
+                        last_run = time.time()
+                except Exception as e:
+                    log.error(f"Forecast logic failed for day {day}: {e}")
                 
                 self._forecast_queue.task_done()
             except queue.Empty:
@@ -393,6 +441,10 @@ class RetailConsumer:
                         if event.get("is_day_start") and day not in seen_days:
                             # If a new day started, finalize the PREVIOUS day if it exists
                             if last_day and last_day != day:
+                                # Flush any pending events for the previous day before finalizing
+                                if self._batch:
+                                    self._writer.write_batch(self._batch)
+                                    self._batch = []
                                 self._writer.finalize_day(last_day)
                             
                             seen_days.add(day)

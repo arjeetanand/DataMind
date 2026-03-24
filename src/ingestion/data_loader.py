@@ -50,8 +50,8 @@ def load_raw(csv_path: Path = KAGGLE_CSV) -> pd.DataFrame:
     raw_rows = len(df)
     # ── Remove cancellations (Invoice starts with C) ──────────────────────────
     df = df[~df["Invoice"].str.startswith("C", na=False)]
-    # ── Drop rows with missing critical fields ─────────────────────────────────
-    df.dropna(subset=["CustomerID", "Description", "InvoiceDate"], inplace=True)
+    # ── Drop rows with missing critical fields (GUESTS ARE OK) ──────────────────
+    df.dropna(subset=["Description", "InvoiceDate"], inplace=True)
     # ── Remove nonsensical quantities / prices ─────────────────────────────────
     df = df[(df["Quantity"] > 0) & (df["Price"] > 0)]
     # ── Derived columns ────────────────────────────────────────────────────────

@@ -115,7 +115,12 @@ def train(df: pd.DataFrame, epochs: int = EPOCHS) -> DemandLSTM:
 
     df_feats = df[FEATURES].fillna(0.0)
 
-    # Scale
+    # Scale with Log-Transform
+    # Using log1p helps handle the huge variance between normal days and holiday peaks.
+    df_feats["y"] = np.log1p(df_feats["y"])
+    df_feats["units"] = np.log1p(df_feats["units"])
+    df_feats["orders"] = np.log1p(df_feats["orders"])
+
     scaler = MinMaxScaler()
     scaled = scaler.fit_transform(df_feats.values)
 
@@ -203,9 +208,16 @@ def predict(df: pd.DataFrame, model: DemandLSTM = None) -> dict:
         model = DemandLSTM().to(DEVICE)
         model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
 
+    # Load scaler if not available
+    if not SCALER_PATH.exists():
+        raise FileNotFoundError(f"Scaler not found at {SCALER_PATH}. Train the model first.")
+        
     with open(SCALER_PATH, "rb") as f:
-        scaler: MinMaxScaler = pickle.load(f)
+        scaler = pickle.load(f)
 
+    import logging
+    _log = logging.getLogger("datamind.forecaster")
+    _log.info(f"predict() input: index [{df.index[0]} → {df.index[-1]}], len={len(df)}")
     # Feature Engineering for Inference
     df["ds"] = pd.to_datetime(df.index)
     df["dow"] = df["ds"].dt.dayofweek
@@ -216,7 +228,13 @@ def predict(df: pd.DataFrame, model: DemandLSTM = None) -> dict:
     df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
     df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
 
-    df_feats = df[FEATURES].fillna(0.0).tail(SEQ_LEN)
+    df_feats = df[FEATURES].fillna(0.0).tail(SEQ_LEN).copy()
+    
+    # Apply Log-Transform before scaling
+    df_feats["y"] = np.log1p(df_feats["y"])
+    df_feats["units"] = np.log1p(df_feats["units"])
+    df_feats["orders"] = np.log1p(df_feats["orders"])
+    
     scaled = scaler.transform(df_feats.values)
 
     x = torch.FloatTensor(scaled).unsqueeze(0).to(DEVICE)  # (1, seq_len, 8)
@@ -231,15 +249,23 @@ def predict(df: pd.DataFrame, model: DemandLSTM = None) -> dict:
             # Inverse transform (only revenue dimension)
             dummy = np.zeros((PRED_LEN, len(FEATURES)))
             dummy[:, 0] = out
-            preds.append(scaler.inverse_transform(dummy)[:, 0])
+            # Inverse linear scale then inverse log scale
+            inv_linear = scaler.inverse_transform(dummy)[:, 0]
+            preds.append(np.expm1(inv_linear))
 
     preds      = np.stack(preds)                     # (50, pred_len)
     mean_pred  = preds.mean(axis=0)
     lower      = np.percentile(preds, 5,  axis=0)
     upper      = np.percentile(preds, 95, axis=0)
 
-    last_date  = pd.to_datetime(df.index[-1]) if isinstance(df.index[-1], (str,)) \
-                 else pd.Timestamp.today()
+    import logging
+    _log = logging.getLogger("datamind.forecaster")
+    _log.info(f"Raw LSTM output (post-expm1): mean={mean_pred.mean():,.0f}, min={mean_pred.min():,.0f}, max={mean_pred.max():,.0f}")
+
+    if len(df) == 0:
+        raise ValueError("Cannot predict on empty DataFrame")
+    last_date = pd.to_datetime(df.index[-1])
+        
     future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=PRED_LEN)
 
     return {

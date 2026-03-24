@@ -72,7 +72,7 @@ def _load_and_clean(csv_path: Path) -> pd.DataFrame:
     )
     df.rename(columns={"Customer ID": "CustomerID"}, inplace=True)
     df = df[~df["Invoice"].str.startswith("C", na=False)]
-    df = df.dropna(subset=["CustomerID", "Description", "InvoiceDate"])
+    df = df.dropna(subset=["Description", "InvoiceDate"])
     df = df[(df["Quantity"] > 0) & (df["Price"] > 0)]
     df["simulated_day"] = df["InvoiceDate"].dt.date.astype(str)
     df = df.sort_values("InvoiceDate").reset_index(drop=True)

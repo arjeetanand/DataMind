@@ -32,11 +32,13 @@ class ActionAgent(BaseAgent):
         """Initialise the ActionAgent and set up an internal action log.
         Registers the agent's role and prepares the reports directory for persisting outputs."""
         super().__init__(role=AgentRole.ACTION)
+        self._action_log = []
 
     def _execute(self, message: A2AMessage) -> dict:
         """Dispatch incoming action requests to specific executor methods based on intent.
         Coordinates between alerts, executive reporting, and anomaly notifications."""
         intent  = message.intent
+        payload = message.payload or {}
 
         if intent == "reorder_alert":
             return self._generate_reorder_alerts(payload)

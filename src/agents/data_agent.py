@@ -40,6 +40,7 @@ class DataAgent(BaseAgent):
         """Process an incoming data retrieval request by mapping intent to SQL queries.
         Returns a serialised result containing raw records and a concise summary."""
         intent = message.intent
+        params = message.payload or {}
 
         if intent not in self.INTENT_MAP:
             raise ValueError(f"Unknown intent '{intent}'. Valid: {list(self.INTENT_MAP)}")

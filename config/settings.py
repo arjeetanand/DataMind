@@ -19,7 +19,7 @@ for p in [RAW_DATA_DIR, PARQUET_DIR, MODEL_DIR, INDEX_DIR]:
     p.mkdir(parents=True, exist_ok=True)
 
 # ── LLM Config ────────────────────────────────────────────────────────────────
-LLM_PROVIDER    = os.getenv("LLM_PROVIDER", "ollama")          # ollama | cohere | openai | oci
+LLM_PROVIDER    = os.getenv("LLM_PROVIDER", "oci")          # ollama | cohere | openai | oci
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2")
 COHERE_API_KEY  = os.getenv("COHERE_API_KEY", "")

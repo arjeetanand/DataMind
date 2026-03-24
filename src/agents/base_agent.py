@@ -90,7 +90,9 @@ class BaseAgent(ABC):
     def __init__(self, role: AgentRole, max_retries: int = 3):
         """Initialise a new agent with a specific architectural role.
         Sets up the internal logger and retry threshold for operations."""
-        self.role        = role
+        self.role = role
+        self.max_retries = max_retries
+        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     def handle(self, message: A2AMessage) -> A2AMessage:
         """Execute the agent's logic on a message with built-in retry safety.

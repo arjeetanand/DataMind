@@ -1,38 +1,38 @@
 import { useState, useEffect, useRef } from "react";
-import { 
-  Database, Brain, Zap, ArrowRight, Play, CheckCircle2, 
-  TrendingUp, Activity, Cpu, Sparkles, Search, FileText, 
+import {
+  Database, Brain, Zap, ArrowRight, Play, CheckCircle2,
+  TrendingUp, Activity, Cpu, Sparkles, Search, FileText,
   Layout, ShieldCheck, Layers, Gauge, Info
 } from "lucide-react";
 
 // --- Custom Hooks ---
 function useCountUp(target, duration = 2000, start = false) {
-    const [val, setVal] = useState(0);
-    useEffect(() => {
-        if (!start) return;
-        let t0 = null;
-        const raf = (ts) => {
-            if (!t0) t0 = ts;
-            const p = Math.min((ts - t0) / duration, 1);
-            const e = 1 - Math.pow(1 - p, 4);
-            setVal(Math.floor(e * target));
-            if (p < 1) requestAnimationFrame(raf);
-            else setVal(target);
-        };
-        requestAnimationFrame(raf);
-    }, [target, duration, start]);
-    return val;
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (!start) return;
+    let t0 = null;
+    const raf = (ts) => {
+      if (!t0) t0 = ts;
+      const p = Math.min((ts - t0) / duration, 1);
+      const e = 1 - Math.pow(1 - p, 4);
+      setVal(Math.floor(e * target));
+      if (p < 1) requestAnimationFrame(raf);
+      else setVal(target);
+    };
+    requestAnimationFrame(raf);
+  }, [target, duration, start]);
+  return val;
 }
 
 function useVisible(threshold = 0.1) {
-    const ref = useRef(null);
-    const [visible, setVisible] = useState(false);
-    useEffect(() => {
-        const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true); }, { threshold });
-        if (ref.current) obs.observe(ref.current);
-        return () => obs.disconnect();
-    }, [threshold]);
-    return [ref, visible];
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true); }, { threshold });
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, [threshold]);
+  return [ref, visible];
 }
 
 // --- UI Components ---
@@ -89,33 +89,33 @@ function DetailOverlay({ isOpen, onClose, title, content, icon: Icon }) {
   if (!isOpen) return null;
   return (
     <div style={{
-      position: "fixed", top: 0, left: 0, width: "100%", height: "100%", 
+      position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
       background: "rgba(0,0,0,0.2)", backdropFilter: "blur(12px)", zIndex: 9999,
       display: "flex", alignItems: "center", justifyContent: "center", padding: "24px"
     }} onClick={onClose}>
-      <div 
-        className="glass" 
-        style={{ 
-          maxWidth: "500px", width: "100%", padding: "40px", borderRadius: "32px", 
-          background: "white", boxShadow: "0 40px 80px rgba(0,0,0,0.1)" 
+      <div
+        className="glass"
+        style={{
+          maxWidth: "500px", width: "100%", padding: "40px", borderRadius: "32px",
+          background: "white", boxShadow: "0 40px 80px rgba(0,0,0,0.1)"
         }}
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "24px" }}>
-            <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "var(--primary-glow)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {Icon && <Icon size={24} />}
-            </div>
-            <h3 style={{ fontSize: "24px", fontWeight: 800 }}>{title}</h3>
+          <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "var(--primary-glow)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {Icon && <Icon size={24} />}
+          </div>
+          <h3 style={{ fontSize: "24px", fontWeight: 800 }}>{title}</h3>
         </div>
         <div style={{ fontSize: "16px", color: "var(--text-muted)", lineHeight: 1.7 }}>{content}</div>
-        <button 
-            style={{ 
-                marginTop: "32px", width: "100%", padding: "14px", borderRadius: "99px", 
-                background: "var(--primary)", color: "white", fontWeight: 700, border: "none", cursor: "pointer" 
-            }}
-            onClick={onClose}
+        <button
+          style={{
+            marginTop: "32px", width: "100%", padding: "14px", borderRadius: "99px",
+            background: "var(--primary)", color: "white", fontWeight: 700, border: "none", cursor: "pointer"
+          }}
+          onClick={onClose}
         >
-            Close Details
+          Close Details
         </button>
       </div>
     </div>
@@ -158,18 +158,18 @@ export default function DataMindShowcase() {
 
   return (
     <div className="DataMindShowcase" style={{ position: "relative", overflowX: "hidden" }}>
-      
+
       {/* --- HERO SECTION --- */}
       <section ref={heroRef} style={{ padding: "180px 24px 120px", textAlign: "center", position: "relative" }}>
         <div style={{ position: "absolute", top: "10%", left: "50%", transform: "translateX(-50%)", width: "100%", height: "100%", zIndex: -1, opacity: 0.4 }}>
-            <svg width="100%" height="100%" viewBox="0 0 1000 600" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="500" cy="300" r="250" stroke="var(--primary)" strokeWidth="0.5" strokeDasharray="10 10">
-                    <animateTransform attributeName="transform" type="rotate" from="0 500 300" to="360 500 300" dur="60s" repeatCount="indefinite" />
-                </circle>
-                <circle cx="500" cy="300" r="150" stroke="var(--secondary)" strokeWidth="0.5" strokeDasharray="5 5">
-                    <animateTransform attributeName="transform" type="rotate" from="360 500 300" to="0 500 300" dur="40s" repeatCount="indefinite" />
-                </circle>
-            </svg>
+          <svg width="100%" height="100%" viewBox="0 0 1000 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="500" cy="300" r="250" stroke="var(--primary)" strokeWidth="0.5" strokeDasharray="10 10">
+              <animateTransform attributeName="transform" type="rotate" from="0 500 300" to="360 500 300" dur="60s" repeatCount="indefinite" />
+            </circle>
+            <circle cx="500" cy="300" r="150" stroke="var(--secondary)" strokeWidth="0.5" strokeDasharray="5 5">
+              <animateTransform attributeName="transform" type="rotate" from="360 500 300" to="0 500 300" dur="40s" repeatCount="indefinite" />
+            </circle>
+          </svg>
         </div>
 
         <div className="fade-up">
@@ -179,7 +179,7 @@ export default function DataMindShowcase() {
             <span style={{ color: "var(--primary)" }}>Decoupled.</span>
           </h1>
           <p style={{ fontSize: "22px", color: "var(--text-muted)", maxWidth: "720px", margin: "0 auto 48px", lineHeight: 1.6 }}>
-            Orchestrating high-velocity retail data into autonomous signals. 
+            Orchestrating high-velocity retail data into autonomous signals.
             Kafka-native ingestion meets PyTorch forecasting.
           </p>
           <div style={{ display: "flex", gap: "20px", justifyContent: "center" }}>
@@ -200,9 +200,9 @@ export default function DataMindShowcase() {
           </div>
         </div>
 
-        <div style={{ 
-          display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "20px", 
-          maxWidth: "1100px", margin: "100px auto 0" 
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "20px",
+          maxWidth: "1100px", margin: "100px auto 0"
         }}>
           {[
             { label: "Kafka TPS", value: 5240, icon: Activity, color: "var(--accent-teal)", detail: "High-throughput ingestion via 4 parallel Kafka partitions, synchronized with ClickHouse Native Engine." },
@@ -227,58 +227,58 @@ export default function DataMindShowcase() {
       {/* --- HOT/COLD ARCHITECTURE FLOW --- */}
       <section style={{ padding: "120px 24px", background: "var(--surface-lowest)" }}>
         <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-          <SectionLabel 
-            label="Engineering Architecture" 
+          <SectionLabel
+            label="Engineering Architecture"
             title="The Hot/Cold Split Strategy"
             sub="Decoupling real-time ingestion from deep analytical queries to ensure zero-lock performance at scale."
           />
 
           <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "60px", marginTop: "80px", alignItems: "center" }}>
             <div style={{ position: "relative", height: "500px", background: "var(--surface-low)", borderRadius: "32px", padding: "40px", overflow: "hidden" }}>
-                {/* Flow Lines Background */}
-                <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}>
-                    <path d="M 50 250 C 150 250, 200 100, 350 100" stroke="var(--primary)" strokeWidth="2" fill="none" strokeDasharray="10 5" opacity="0.3" />
-                    <path d="M 50 250 C 150 250, 200 400, 350 400" stroke="var(--secondary)" strokeWidth="2" fill="none" strokeDasharray="10 5" opacity="0.3" />
-                    <circle r="4" fill="var(--primary)">
-                        <animateMotion path="M 50 250 C 150 250, 200 100, 350 100" dur="3s" repeatCount="indefinite" />
-                    </circle>
-                    <circle r="4" fill="var(--secondary)">
-                        <animateMotion path="M 50 250 C 150 250, 200 400, 350 400" dur="4s" repeatCount="indefinite" />
-                    </circle>
-                </svg>
+              {/* Flow Lines Background */}
+              <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}>
+                <path d="M 50 250 C 150 250, 200 100, 350 100" stroke="var(--primary)" strokeWidth="2" fill="none" strokeDasharray="10 5" opacity="0.3" />
+                <path d="M 50 250 C 150 250, 200 400, 350 400" stroke="var(--secondary)" strokeWidth="2" fill="none" strokeDasharray="10 5" opacity="0.3" />
+                <circle r="4" fill="var(--primary)">
+                  <animateMotion path="M 50 250 C 150 250, 200 100, 350 100" dur="3s" repeatCount="indefinite" />
+                </circle>
+                <circle r="4" fill="var(--secondary)">
+                  <animateMotion path="M 50 250 C 150 250, 200 400, 350 400" dur="4s" repeatCount="indefinite" />
+                </circle>
+              </svg>
 
-                {/* Nodes */}
-                <div style={{ position: "absolute", left: "20px", top: "220px" }}>
-                    <div className="glass" style={{ padding: "16px", borderRadius: "16px", textAlign: "center", width: "100px", cursor: "pointer" }} onClick={() => openModal("Kafka Ingestion", "4 parallel partitions process high-velocity streams. Each partition ensures sub-second synchronization via the ClickHouse Native Engine, providing a zero-lock architecture for real-time retail events.", RadioIcon)}>
-                        <RadioIcon active={true} />
-                        <div style={{ fontSize: "10px", fontWeight: 800, marginTop: "8px" }}>KAFKA</div>
-                        <div style={{ fontSize: "8px", color: "var(--primary)", marginTop: "4px" }}>CLICK FOR INFO</div>
-                    </div>
+              {/* Nodes */}
+              <div style={{ position: "absolute", left: "20px", top: "220px" }}>
+                <div className="glass" style={{ padding: "16px", borderRadius: "16px", textAlign: "center", width: "100px", cursor: "pointer" }} onClick={() => openModal("Kafka Ingestion", "4 parallel partitions process high-velocity streams. Each partition ensures sub-second synchronization via the ClickHouse Native Engine, providing a zero-lock architecture for real-time retail events.", RadioIcon)}>
+                  <RadioIcon active={true} />
+                  <div style={{ fontSize: "10px", fontWeight: 800, marginTop: "8px" }}>KAFKA</div>
+                  <div style={{ fontSize: "8px", color: "var(--primary)", marginTop: "4px" }}>CLICK FOR INFO</div>
                 </div>
+              </div>
 
-                <div style={{ position: "absolute", left: "350px", top: "70px" }}>
-                    <div className="glass" style={{ padding: "16px", borderRadius: "16px", textAlign: "center", width: "120px", border: "1px solid var(--primary)", cursor: "pointer" }} onClick={() => openModal("Hot Path (ClickHouse)", "The Hot Path utilizes ClickHouse's high-performance native storage for sub-millisecond KPI retrieval. It handles massive ingestion volumes without locking analytical queries.", Cpu)}>
-                        <Cpu size={24} color="var(--primary)" />
-                        <div style={{ fontSize: "10px", fontWeight: 800, marginTop: "8px" }}>HOT PATH</div>
-                        <div style={{ fontSize: "9px", color: "var(--text-dim)" }}>ClickHouse</div>
-                    </div>
+              <div style={{ position: "absolute", left: "350px", top: "70px" }}>
+                <div className="glass" style={{ padding: "16px", borderRadius: "16px", textAlign: "center", width: "120px", border: "1px solid var(--primary)", cursor: "pointer" }} onClick={() => openModal("Hot Path (ClickHouse)", "The Hot Path utilizes ClickHouse's high-performance native storage for sub-millisecond KPI retrieval. It handles massive ingestion volumes without locking analytical queries.", Cpu)}>
+                  <Cpu size={24} color="var(--primary)" />
+                  <div style={{ fontSize: "10px", fontWeight: 800, marginTop: "8px" }}>HOT PATH</div>
+                  <div style={{ fontSize: "9px", color: "var(--text-dim)" }}>ClickHouse</div>
                 </div>
+              </div>
 
-                <div style={{ position: "absolute", left: "350px", top: "370px" }}>
-                    <div className="glass" style={{ padding: "16px", borderRadius: "16px", textAlign: "center", width: "120px", border: "1px solid var(--secondary)", cursor: "pointer" }} onClick={() => openModal("Cold Path (DuckDB)", "Our analytical warehouse uses DuckDB with a Star Schema architecture. It stores historical data in Hive-partitioned Parquet files, optimized for complex LLM-generated SQL queries.", Database)}>
-                        <Database size={24} color="var(--secondary)" />
-                        <div style={{ fontSize: "10px", fontWeight: 800, marginTop: "8px" }}>COLD PATH</div>
-                        <div style={{ fontSize: "9px", color: "var(--text-dim)" }}>DuckDB + Parquet</div>
-                    </div>
+              <div style={{ position: "absolute", left: "350px", top: "370px" }}>
+                <div className="glass" style={{ padding: "16px", borderRadius: "16px", textAlign: "center", width: "120px", border: "1px solid var(--secondary)", cursor: "pointer" }} onClick={() => openModal("Cold Path (DuckDB)", "Our analytical warehouse uses DuckDB with a Star Schema architecture. It stores historical data in Hive-partitioned Parquet files, optimized for complex LLM-generated SQL queries.", Database)}>
+                  <Database size={24} color="var(--secondary)" />
+                  <div style={{ fontSize: "10px", fontWeight: 800, marginTop: "8px" }}>COLD PATH</div>
+                  <div style={{ fontSize: "9px", color: "var(--text-dim)" }}>DuckDB + Parquet</div>
                 </div>
+              </div>
 
-                <div style={{ position: "absolute", right: "40px", top: "220px" }}>
-                    <div className="glass" style={{ padding: "20px", borderRadius: "20px", textAlign: "center", width: "160px", background: "var(--primary)", color: "white", cursor: "pointer" }} onClick={() => openModal("Intelligence Layer", "Combines LlamaIndex RAG with a PyTorch LSTM + Attention model. It uses Monte Carlo dropout for demand uncertainty quantification and triggers autonomous agent actions.", Brain)}>
-                        <Brain size={32} />
-                        <div style={{ fontSize: "12px", fontWeight: 800, marginTop: "8px" }}>INTELLIGENCE</div>
-                        <div style={{ fontSize: "10px", opacity: 0.8 }}>RAG + LSTM</div>
-                    </div>
+              <div style={{ position: "absolute", right: "40px", top: "220px" }}>
+                <div className="glass" style={{ padding: "20px", borderRadius: "20px", textAlign: "center", width: "160px", background: "var(--primary)", color: "white", cursor: "pointer" }} onClick={() => openModal("Intelligence Layer", "Combines LlamaIndex RAG with a PyTorch LSTM + Attention model. It uses Monte Carlo dropout for demand uncertainty quantification and triggers autonomous agent actions.", Brain)}>
+                  <Brain size={32} />
+                  <div style={{ fontSize: "12px", fontWeight: 800, marginTop: "8px" }}>INTELLIGENCE</div>
+                  <div style={{ fontSize: "10px", opacity: 0.8 }}>RAG + LSTM</div>
                 </div>
+              </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -289,8 +289,8 @@ export default function DataMindShowcase() {
               ].map((item, i) => (
                 <PremiumCard key={i} active={activeLayer === i} onClick={() => setActiveLayer(i)} style={{ padding: "20px" }}>
                   <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
-                    <div style={{ 
-                      width: "48px", height: "48px", borderRadius: "14px", 
+                    <div style={{
+                      width: "48px", height: "48px", borderRadius: "14px",
                       background: activeLayer === i ? "var(--primary)" : "var(--surface-high)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       color: activeLayer === i ? "white" : "var(--primary)",
@@ -320,8 +320,8 @@ export default function DataMindShowcase() {
           </div>
 
           <div style={{ display: "flex", justifyContent: "center", marginBottom: "80px" }}>
-            <button 
-              onClick={runAgentFlow} 
+            <button
+              onClick={runAgentFlow}
               disabled={isRunning}
               style={{
                 padding: "14px 36px", borderRadius: "99px", background: isRunning ? "var(--surface-high)" : "var(--primary-glow)",
@@ -337,7 +337,7 @@ export default function DataMindShowcase() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "32px", position: "relative" }}>
             <div style={{ position: "absolute", top: "50px", left: "10%", right: "10%", height: "2px", background: "var(--surface-highest)", zIndex: 0 }}>
-                <div style={{ height: "100%", width: `${(step / 3) * 100}%`, background: "var(--primary)", transition: "width 1s ease", boxShadow: "0 0 15px var(--primary)" }} />
+              <div style={{ height: "100%", width: `${(step / 3) * 100}%`, background: "var(--primary)", transition: "width 1s ease", boxShadow: "0 0 15px var(--primary)" }} />
             </div>
 
             {[
@@ -345,14 +345,14 @@ export default function DataMindShowcase() {
               { id: 2, name: "InsightAgent", task: "RAG + LSTM Analysis", icon: Brain, detail: "Orchestrates the retrieval of historical KPIs and feeds them into the LSTM + Attention model for demand forecasting. Calculates uncertainty using Monte Carlo dropout." },
               { id: 3, name: "ActionAgent", task: "Executive Report Render", icon: FileText, detail: "Synthesizes data findings into executive-level narratives. Recommends stock adjustments and triggers procurement signals based on predicted demand spikes." },
             ].map((agent, i) => (
-              <PremiumCard 
-                key={i} 
-                active={step >= agent.id} 
-                hover={true} 
+              <PremiumCard
+                key={i}
+                active={step >= agent.id}
+                hover={true}
                 style={{ textAlign: "center", zIndex: 1, padding: "32px", cursor: "pointer" }}
                 onClick={() => openModal(agent.name, agent.detail, agent.icon)}
               >
-                <div style={{ 
+                <div style={{
                   width: "72px", height: "72px", margin: "0 auto 24px", borderRadius: "22px",
                   background: step > agent.id ? "var(--primary)" : step === agent.id ? "var(--surface-lowest)" : "var(--surface-low)",
                   border: step === agent.id ? "2px solid var(--primary)" : "1px solid var(--border-ghost)",
@@ -376,45 +376,45 @@ export default function DataMindShowcase() {
       {/* --- ML PREDICTION VISUAL --- */}
       <section style={{ padding: "120px 24px", background: "var(--surface-lowest)" }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <SectionLabel 
-            label="Machine Learning" 
+          <SectionLabel
+            label="Machine Learning"
             title="Predictive Signal Synthesis"
             sub="Beyond simple regression. Our PyTorch LSTM + Attention layer quantifies uncertainty in high-volatility retail markets."
           />
 
           <PremiumCard style={{ marginTop: "60px", padding: "48px", overflow: "hidden" }} hover={false}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: "60px", alignItems: "center" }}>
-                <div>
-                    <Badge type="accent" icon={TrendingUp}>Model: LSTM + Attention</Badge>
-                    <h3 style={{ fontSize: "28px", fontWeight: 800, marginTop: "24px" }}>Demand Forecasting</h3>
-                    <p style={{ color: "var(--text-muted)", marginTop: "16px", lineHeight: 1.6 }}>
-                        The model processes 14-day lookback windows with dynamic attention weights assigned to seasonal spikes (holidays, promos).
-                    </p>
-                    <ul style={{ listStyle: "none", padding: 0, marginTop: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                        <li style={{ display: "flex", gap: "10px", fontWeight: 600, color: "var(--text)" }}><CheckCircle2 size={18} color="var(--accent-teal)" /> Bayesian Uncertainty Estimation</li>
-                        <li style={{ display: "flex", gap: "10px", fontWeight: 600, color: "var(--text)" }}><CheckCircle2 size={18} color="var(--accent-teal)" /> Feature Engineering on S3 Parquet</li>
-                        <li style={{ display: "flex", gap: "10px", fontWeight: 600, color: "var(--text)" }}><CheckCircle2 size={18} color="var(--accent-teal)" /> Monte Carlo Dropout (p=0.2)</li>
-                    </ul>
+              <div>
+                <Badge type="accent" icon={TrendingUp}>Model: LSTM + Attention</Badge>
+                <h3 style={{ fontSize: "28px", fontWeight: 800, marginTop: "24px" }}>Demand Forecasting</h3>
+                <p style={{ color: "var(--text-muted)", marginTop: "16px", lineHeight: 1.6 }}>
+                  The model processes 14-day lookback windows with dynamic attention weights assigned to seasonal spikes (holidays, promos).
+                </p>
+                <ul style={{ listStyle: "none", padding: 0, marginTop: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <li style={{ display: "flex", gap: "10px", fontWeight: 600, color: "var(--text)" }}><CheckCircle2 size={18} color="var(--accent-teal)" /> Bayesian Uncertainty Estimation</li>
+                  <li style={{ display: "flex", gap: "10px", fontWeight: 600, color: "var(--text)" }}><CheckCircle2 size={18} color="var(--accent-teal)" /> Feature Engineering on S3 Parquet</li>
+                  <li style={{ display: "flex", gap: "10px", fontWeight: 600, color: "var(--text)" }}><CheckCircle2 size={18} color="var(--accent-teal)" /> Monte Carlo Dropout (p=0.2)</li>
+                </ul>
+              </div>
+              <div style={{ height: "300px", background: "var(--surface-high)", borderRadius: "24px", position: "relative", padding: "30px", overflow: "hidden" }}>
+                {/* Fake Chart */}
+                <svg viewBox="0 0 400 200" style={{ width: "100%", height: "100%" }}>
+                  {/* Shaded Uncertainty Area */}
+                  <path d="M 0 100 Q 50 80, 100 120 T 200 60 T 300 140 T 400 80 L 400 120 Q 350 160, 300 180 T 200 100 T 100 160 T 0 140 Z" fill="var(--primary)" opacity="0.1" />
+                  {/* Main Prediction Line */}
+                  <path d="M 0 120 Q 50 100, 100 140 T 200 80 T 300 160 T 400 100" stroke="var(--primary)" strokeWidth="3" fill="none" strokeDasharray="1000">
+                    <animate attributeName="stroke-dashoffset" from="1000" to="0" dur="3s" repeatCount="indefinite" />
+                  </path>
+                  {/* Actual Data Dots */}
+                  <circle cx="50" cy="100" r="4" fill="var(--text-dim)" />
+                  <circle cx="150" cy="110" r="4" fill="var(--text-dim)" />
+                  <circle cx="250" cy="130" r="4" fill="var(--text-dim)" />
+                </svg>
+                <div style={{ position: "absolute", bottom: "20px", left: "30px", fontSize: "10px", fontWeight: 800, color: "var(--primary)", display: "flex", gap: "20px" }}>
+                  <span>MODEL PREDICTION</span>
+                  <span style={{ color: "var(--text-dim)" }}>ACTUAL SALES</span>
                 </div>
-                <div style={{ height: "300px", background: "var(--surface-high)", borderRadius: "24px", position: "relative", padding: "30px", overflow: "hidden" }}>
-                    {/* Fake Chart */}
-                    <svg viewBox="0 0 400 200" style={{ width: "100%", height: "100%" }}>
-                        {/* Shaded Uncertainty Area */}
-                        <path d="M 0 100 Q 50 80, 100 120 T 200 60 T 300 140 T 400 80 L 400 120 Q 350 160, 300 180 T 200 100 T 100 160 T 0 140 Z" fill="var(--primary)" opacity="0.1" />
-                        {/* Main Prediction Line */}
-                        <path d="M 0 120 Q 50 100, 100 140 T 200 80 T 300 160 T 400 100" stroke="var(--primary)" strokeWidth="3" fill="none" strokeDasharray="1000">
-                           <animate attributeName="stroke-dashoffset" from="1000" to="0" dur="3s" repeatCount="indefinite" />
-                        </path>
-                        {/* Actual Data Dots */}
-                        <circle cx="50" cy="100" r="4" fill="var(--text-dim)" />
-                        <circle cx="150" cy="110" r="4" fill="var(--text-dim)" />
-                        <circle cx="250" cy="130" r="4" fill="var(--text-dim)" />
-                    </svg>
-                    <div style={{ position: "absolute", bottom: "20px", left: "30px", fontSize: "10px", fontWeight: 800, color: "var(--primary)", display: "flex", gap: "20px" }}>
-                        <span>MODEL PREDICTION</span>
-                        <span style={{ color: "var(--text-dim)" }}>ACTUAL SALES</span>
-                    </div>
-                </div>
+              </div>
             </div>
           </PremiumCard>
         </div>
@@ -423,44 +423,44 @@ export default function DataMindShowcase() {
       {/* --- CHALLENGES & EVOLUTION --- */}
       <section style={{ padding: "120px 24px", background: "linear-gradient(to bottom, var(--bg), #fff)" }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <SectionLabel 
-            label="Problem Solving" 
+          <SectionLabel
+            label="Problem Solving"
             title="Legacy Chaos vs DataMind Precision"
             sub="We solved the critical bottlenecks of volume-heavy retail data processing."
           />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px", marginTop: "60px" }}>
-             <div className="glass" style={{ padding: "40px", borderRadius: "32px", border: "1px solid var(--accent-coral)", opacity: 0.8 }}>
-                <Badge type="ghost">Legacy Bottleneck</Badge>
-                <div style={{ marginTop: "24px", color: "var(--accent-coral)", fontWeight: 800, fontSize: "24px" }}>The Crisis</div>
-                <ul style={{ marginTop: "20px", listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "16px" }}>
-                    <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text-muted)" }}>
-                        <Info size={20} /> Kafka Partition Lag (15s+)
-                    </li>
-                    <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text-muted)" }}>
-                        <Info size={20} /> DuckDB Write-Wait Locks
-                    </li>
-                    <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text-muted)" }}>
-                        <Info size={20} /> Non-idempotent transactions
-                    </li>
-                </ul>
-             </div>
+            <div className="glass" style={{ padding: "40px", borderRadius: "32px", border: "1px solid var(--accent-coral)", opacity: 0.8 }}>
+              <Badge type="ghost">Legacy Bottleneck</Badge>
+              <div style={{ marginTop: "24px", color: "var(--accent-coral)", fontWeight: 800, fontSize: "24px" }}>The Crisis</div>
+              <ul style={{ marginTop: "20px", listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "16px" }}>
+                <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text-muted)" }}>
+                  <Info size={20} /> Kafka Partition Lag (15s+)
+                </li>
+                <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text-muted)" }}>
+                  <Info size={20} /> DuckDB Write-Wait Locks
+                </li>
+                <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text-muted)" }}>
+                  <Info size={20} /> Non-idempotent transactions
+                </li>
+              </ul>
+            </div>
 
-             <div className="glass" style={{ padding: "40px", borderRadius: "32px", border: "1px solid var(--accent-teal)", background: "rgba(0, 140, 115, 0.02)" }}>
-                <Badge type="accent">The DataMind Solution</Badge>
-                <div style={{ marginTop: "24px", color: "var(--accent-teal)", fontWeight: 800, fontSize: "24px" }}>The Success</div>
-                <ul style={{ marginTop: "20px", listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "16px" }}>
-                    <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text)", fontWeight: 600 }}>
-                        <CheckCircle2 size={20} /> Sub-second Kafka native sync
-                    </li>
-                    <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text)", fontWeight: 600 }}>
-                        <CheckCircle2 size={20} /> Decoupled ClickHouse Buffering
-                    </li>
-                    <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text)", fontWeight: 600 }}>
-                        <CheckCircle2 size={20} /> ACID compliant Star Schema
-                    </li>
-                </ul>
-             </div>
+            <div className="glass" style={{ padding: "40px", borderRadius: "32px", border: "1px solid var(--accent-teal)", background: "rgba(0, 140, 115, 0.02)" }}>
+              <Badge type="accent">The DataMind Solution</Badge>
+              <div style={{ marginTop: "24px", color: "var(--accent-teal)", fontWeight: 800, fontSize: "24px" }}>The Success</div>
+              <ul style={{ marginTop: "20px", listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "16px" }}>
+                <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text)", fontWeight: 600 }}>
+                  <CheckCircle2 size={20} /> Sub-second Kafka native sync
+                </li>
+                <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text)", fontWeight: 600 }}>
+                  <CheckCircle2 size={20} /> Decoupled ClickHouse Buffering
+                </li>
+                <li style={{ display: "flex", gap: "12px", fontSize: "16px", color: "var(--text)", fontWeight: 600 }}>
+                  <CheckCircle2 size={20} /> ACID compliant Star Schema
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
@@ -468,41 +468,41 @@ export default function DataMindShowcase() {
       {/* --- TESTING & QUALITY --- */}
       <section style={{ padding: "120px 24px" }}>
         <div style={{ maxWidth: "900px", margin: "0 auto" }}>
-           <PremiumCard style={{ padding: "60px", textAlign: "center", background: "linear-gradient(135deg, #fff 0%, var(--surface-low) 100%)" }}>
-              <div style={{ width: "80px", height: "80px", background: "var(--accent-teal)", borderRadius: "24px", margin: "0 auto 32px", display: "flex", alignItems: "center", justifyContent: "center", color: "white", boxShadow: "0 20px 40px rgba(0, 140, 115, 0.2)" }}>
-                 <ShieldCheck size={40} />
+          <PremiumCard style={{ padding: "60px", textAlign: "center", background: "linear-gradient(135deg, #fff 0%, var(--surface-low) 100%)" }}>
+            <div style={{ width: "80px", height: "80px", background: "var(--accent-teal)", borderRadius: "24px", margin: "0 auto 32px", display: "flex", alignItems: "center", justifyContent: "center", color: "white", boxShadow: "0 20px 40px rgba(0, 140, 115, 0.2)" }}>
+              <ShieldCheck size={40} />
+            </div>
+            <h3 style={{ fontSize: "32px", fontWeight: 800 }}>Engineered Reliability</h3>
+            <p style={{ color: "var(--text-muted)", marginTop: "16px", fontSize: "18px" }}>
+              100% codebase coverage. Production-grade stability verified with <b>Pytest</b>.
+            </p>
+
+            <div style={{ display: "flex", justifyContent: "center", gap: "40px", marginTop: "48px" }}>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase" }}>Test Suite</div>
+                <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--text)", marginTop: "8px" }}>41 Passed</div>
               </div>
-              <h3 style={{ fontSize: "32px", fontWeight: 800 }}>Engineered Reliability</h3>
-              <p style={{ color: "var(--text-muted)", marginTop: "16px", fontSize: "18px" }}>
-                100% codebase coverage. Production-grade stability verified with <b>Pytest</b>.
-              </p>
-              
-              <div style={{ display: "flex", justifyContent: "center", gap: "40px", marginTop: "48px" }}>
-                 <div>
-                    <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase" }}>Test Suite</div>
-                    <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--text)", marginTop: "8px" }}>41 Passed</div>
-                 </div>
-                 <div style={{ width: "1px", height: "50px", background: "var(--border-ghost)" }} />
-                 <div>
-                    <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase" }}>Coverage</div>
-                    <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--accent-teal)", marginTop: "8px" }}>98.4%</div>
-                 </div>
-                 <div style={{ width: "1px", height: "50px", background: "var(--border-ghost)" }} />
-                 <div>
-                    <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase" }}>Build Status</div>
-                    <Badge type="accent">Healthy</Badge>
-                 </div>
+              <div style={{ width: "1px", height: "50px", background: "var(--border-ghost)" }} />
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase" }}>Coverage</div>
+                <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--accent-teal)", marginTop: "8px" }}>98.4%</div>
               </div>
-           </PremiumCard>
+              <div style={{ width: "1px", height: "50px", background: "var(--border-ghost)" }} />
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase" }}>Build Status</div>
+                <Badge type="accent">Healthy</Badge>
+              </div>
+            </div>
+          </PremiumCard>
         </div>
       </section>
 
-      <DetailOverlay 
-        isOpen={modal.open} 
-        onClose={closeModal} 
-        title={modal.title} 
-        content={modal.content} 
-        icon={modal.icon} 
+      <DetailOverlay
+        isOpen={modal.open}
+        onClose={closeModal}
+        title={modal.title}
+        content={modal.content}
+        icon={modal.icon}
       />
 
     </div>
@@ -518,27 +518,27 @@ function CountUp({ value, duration }) {
 function PulseLoader() {
   return (
     <div style={{ display: "flex", gap: "4px" }}>
-        {[0, 1, 2].map(i => (
-            <div key={i} style={{ 
-                width: "6px", height: "6px", borderRadius: "50%", background: "var(--primary)",
-                animation: `pulse-glow 1s ease-in-out ${i * 0.2}s infinite`
-            }} />
-        ))}
+      {[0, 1, 2].map(i => (
+        <div key={i} style={{
+          width: "6px", height: "6px", borderRadius: "50%", background: "var(--primary)",
+          animation: `pulse-glow 1s ease-in-out ${i * 0.2}s infinite`
+        }} />
+      ))}
     </div>
   );
 }
 
 function RadioIcon({ active }) {
-    return (
-        <div style={{ position: "relative", width: "24px", height: "24px", margin: "0 auto" }}>
-            <Activity size={24} color={active ? "var(--primary)" : "var(--text-dim)"} />
-            {active && (
-                <div style={{ 
-                    position: "absolute", top: 0, left: 0, width: "100%", height: "100%", 
-                    borderRadius: "50%", border: "2px solid var(--primary)",
-                    animation: "pulse-glow 2s infinite"
-                }} />
-            )}
-        </div>
-    );
+  return (
+    <div style={{ position: "relative", width: "24px", height: "24px", margin: "0 auto" }}>
+      <Activity size={24} color={active ? "var(--primary)" : "var(--text-dim)"} />
+      {active && (
+        <div style={{
+          position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
+          borderRadius: "50%", border: "2px solid var(--primary)",
+          animation: "pulse-glow 2s infinite"
+        }} />
+      )}
+    </div>
+  );
 }
