@@ -80,6 +80,7 @@ uvicorn src.api.main:app --reload
 
 # Start React Frontend
 cd frontend && npm install && npm run dev
+cd frontend && npm run dev
 ```
 
 ---
@@ -102,10 +103,11 @@ python -m src.streaming.consumer
 python -m src.streaming.producer --speed normal  # normal | fast | burst
 ```
 
-### 3. Runtime Control
+### 3. Runtime Control & Testing
 - **Sync Status**: `GET /live/status`
 - **KPI Metrics**: `GET /live/kpis`
-- **Reset Dashboard**: `POST /live/reset`
+- **Reset Dashboard**: `POST /live/reset` (Reliably purges Kafka, ClickHouse, Redis, and DuckDB)
+- **Terminal Test Suite**: `python test_cli.py` (Interactive verification of all 9 pipeline features)
 
 ---
 
@@ -129,9 +131,11 @@ POST /pipeline/run
 ---
 
 ## Latest Improvements
-- **100% Documentation**: Standardized 2-line "Action + Impact" docstrings across all modules.
+- **Live Forecast Correction**: Implemented dynamic scale calibration in `consumer.py` to align ML predictions with high-volume live revenue (£100k+/day) in real-time.
+- **Robust Reset Pipeline**: Fixed critical `NameError` and async-blocking bugs in the `/live/reset` endpoint, ensuring 100% data purge across Kafka, ClickHouse, and Redis.
+- **Interactive Test CLI**: Created `test_cli.py`, a comprehensive terminal test suite for validating API health, streaming performance, and model accuracy.
+- **100% Documentation**: Standardized 2-line "Action + Impact" docstrings across all backend modules.
 - **Clean Repository**: Removed extraneous testing and temporary data folders for production readiness.
-- **Dependency Sync**: Consolidated requirements for local and enterprise GenAI (OCI) support.
 
 ---
 
